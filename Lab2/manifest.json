@@ -4,7 +4,7 @@
   "platform": "4.4.3",
   "metadata": {
     "appmode": "rmd-static",
-    "primary_rmd": "OnlineRetail.Rmd",
+    "primary_rmd": "Lab2/OnlineRetail.Rmd",
     "primary_html": null,
     "content_category": "OnlineRetail.Rmd",
     "has_parameters": false
