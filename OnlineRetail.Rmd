@@ -1,0 +1,213 @@
+---
+title: "Online Retail"
+author: "Χρήστος Γιαμακίδης Κιοσσές (ics21018)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: darkly
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Εισαγωγή
+
+### Περιγραφή του Dataset
+
+To [**Online Retail Dataset**](https://archive.ics.uci.edu/dataset/352/online+retail) κοινοποιήθηκε στις 11/5/2015 στην *UC Irvine Machine Learning Repository*, ένα αποθετήριο βάσεων, συνόλων δεδομένων και θεωριών πεδίων. Περιλαμβάνει τις συναλλαγές ενός διαδικτυακού καταστήματος με έδρα το **Ηνωμένο Βασίλειο**, που πραγματοποιήθηκαν μεταξύ *1 Δεκεμβρίου 2010* και *9 Δεκεμβρίου 2011*.
+
+### Επιχειρηματική Αναλυτική
+
+Η ανάλυση των δεδομένων του Dataset μπορεί να βοηθήσει στην κατανόηση της συμπεριφοράς των πελατών, στην αναγνώριση δημοφιλών προϊόντων, στη διαχείριση αποθεμάτων και στην ανάπτυξη στρατηγικών μάρκετινγκ.
+
+### Πιθανά Επιχειρηματικά Ερωτήματα
+
+-   Ποια προϊόντα έχουν τις υψηλότερες πωλήσεις και ποια παρουσιάζουν χαμηλή ζήτηση;
+-   Ποιοι είναι οι πολυτιμότεροι πελάτες βάσει του όγκου και της αξίας των αγορών τους;
+-   Υπάρχουν εποχιακές τάσεις στις πωλήσεις συγκεκριμένων προϊόντων;
+-   Ποιο είναι το μέσο μέγεθος παραγγελίας και πώς αυτό επηρεάζει τα συνολικά έσοδα;
+
+
+## Περιγραφή των Μεταβλητών
+
+```{r, include=FALSE}
+library(readr)
+library(knitr)
+
+onlineRetail <- read.csv("C:/Users/giama/Desktop/Chris/BussinessAnalytics/Lab2/OnlineRetail.csv")
+
+onlineRetail$InvoiceDate <- as.Date(onlineRetail$InvoiceDate)
+
+stats <- data.frame(
+  Variable = c("InvoiceNo", "StockCode", "Description", "Quantity", "InvoiceDate", "UnitPrice", "CustomerID", "Country"),
+  Description = c(
+    "Αριθμός τιμολογίου", "Κωδικός προϊόντος", "Περιγραφή προϊόντος", 
+    "Ποσότητα προϊόντος ανά συναλλαγή", "Ημερομηνία τιμολογίου", "Τιμή ανά μονάδα προϊόντος", "Αναγνωριστικό πελάτη", "Χώρα πελάτη"),
+  Type = c("Κατηγορική", "Κατηγορική", "Κατηγορική", "Αριθμητική", "Αριθμητική ", "Αριθμητική", "Αριθμητική", "Κατηγορική"),
+  Range = c(
+    "-", "-", "-", 
+    paste(range(onlineRetail$Quantity), collapse = " - "),
+    paste(range(onlineRetail$InvoiceDate), collapse = " - "),
+    paste(range(onlineRetail$UnitPrice), collapse = " - "),
+    paste(range(onlineRetail$CustomerID), collapse = " - "),
+    "-"
+  ),
+  Measurement_Unit = c("-", "-", "-", "-", "-", "Pounds(£)", "-", "-")
+)
+```
+
+```{r}
+kable(stats, col.names = c("Μεταβλητή", "Περιγραφή", "Τύπος", "Εύρος", "Μονάδα Μέτρησης"), caption = "Αναλυτικός πίνακας με τα στοιχεία των μεταβλητών:")
+
+```
+
+
+## Περιγραφικά Στατιστικά
+
+Υπολογίζονται και παρουσιάζονται τα περιγραφικά στατιστικά των αριθμητικών μεταβλητών.
+
+### Μέτρα Κεντρικής Τάσης
+
+```{r}
+kable(summary(onlineRetail[, c("Quantity", "UnitPrice", "InvoiceDate")]))
+```
+
+### Μέτρα Διασποράς
+
+```{r, include=FALSE}
+results <- data.frame(
+  Μεταβλητή = c("Quantity", "UnitPrice", "InvoiceDate"),
+  Τυπική_Απόκλιση = c(
+    sd(onlineRetail$Quantity),
+    sd(onlineRetail$UnitPrice),    
+    sd(onlineRetail$InvoiceDate)
+
+  ),
+  Διακύμανση = c(
+    var(onlineRetail$Quantity),
+    var(onlineRetail$UnitPrice),
+    var(onlineRetail$InvoiceDate)
+  )
+)
+```
+
+```{r}
+kable(results, digits = 2, align = c("l", "l", "l"), col.names = c("Μεταβλητή", "Τυπική Απόκλιση", "Διακύμανση"))
+```
+
+
+## Διερεύνηση Συσχετίσεων
+
+Στο **Online Retail Dataset**, έχει νόημα να υπολογίσουμε μόνο την συσχέτιση μεταξύ των αριθμητικών μεταβλητών *UnitPrice* και *Quantity*, καθώς οι υπόλοιπες στήλες έχουν ποιοτικά δεδομένα.
+
+```{r}
+cor(onlineRetail$UnitPrice, onlineRetail$Quantity, method = "pearson")
+cor(onlineRetail$UnitPrice, onlineRetail$Quantity, method = "spearman")
+```
+
+**Παρατηρήσεις**
+<br>
+Και στις δύο περιπτώσεις παρατηρούμε πως ο συντελεστής συσχέτισης των μεταβλητών είναι αρνητικός που σημαίνει ότι όσο αυξάνεται η *Τιμή των Προϊόντων*↑, τόσο μειώνεται η *Zήτηση*↓ τους, καθώς οι πελάτες αναγκάζονται να τα αγοράσουν σε μικρότερες ποσότητες. Η μέθοδος **Spearman** μας δίνει μεγαλύτερο συντελεστή συσχέτισης σε σχέση με την μέθοδο **Pearson**, καθώς δεν είναι ευαίσθητη σε ακραίες τιμές που πιθανώς υπάρχουν στο Dataset.
+
+
+## Διαγράμματα Συσχετίσεων
+
+```{r, include=FALSE}
+library(ggplot2)
+```
+
+### *Γράφημα 1:* **Σχέση Τιμής και Ποσότητας προϊόντων ανά παραγγελία**
+
+```{r}
+scatterData <- subset(onlineRetail, UnitPrice < 2000 & Quantity < 5000)
+
+ggplot(scatterData, aes(UnitPrice, Quantity)) + 
+  geom_point(color = "blue", alpha = 0.5, size = 2) +
+  scale_x_continuous(name = "Unit Price (£)") +  
+  scale_y_continuous(name = "Quantity per Order") +  
+  theme_minimal() +
+  labs(title = "Scatterplot of Product Unit Prices and Quantity of each order")
+```
+
+**Σχόλιο**
+<br>
+Έχοντας αφαιρέσει τα outliers για *UnitPrice* και *Quantity*, παρατηρούμε πως τα οικονομικότερα προϊόντα έχουν μεγαλύτερη ζήτηση σε σχέση με τα ακριβότερα, καθώς οι ποσότητες για κάθε παραγγελία αυξάνονται όσο μειώνεται η τιμή (αρνητική συσχέτιση μεταβλητών).
+
+
+### *Γράφημα 2:* **Ποσότητες των 5 κορυφαίων προϊόντων σε πωλήσεις**
+
+```{r}
+boxplotData <- subset(onlineRetail, onlineRetail$Quantity < 100)
+
+category_summary <- aggregate(Quantity ~ Description, data = boxplotData, sum)
+category_summary <- category_summary[order(-category_summary$Quantity), ]
+top_categories <- head(category_summary, 5)
+filtered_data <- boxplotData[boxplotData$Description %in% top_categories$Description, ]
+
+ggplot(filtered_data, aes(reorder(Description, -Quantity), Quantity)) +
+  geom_boxplot(fill = "cyan", outlier.color = "red", outlier.shape = 8) +
+  coord_flip() +  
+  labs(
+    title = "Boxplot of Quantity Sold (Top 5 Product Categories)",
+    x = "Product Descreption",
+    y = "Quantity Sold"
+  ) +
+  theme_minimal()
+```
+
+**Σχόλια**
+<br>
+Περιορίζουμε το dataset ελλατώνοντας κι άλλο τις *Ποσότητες Προϊόντων* ανά παραγγελία (Quantity<100), για να πετύχουμε ένα διακριτό αποτέλεσμα. Παρατηρώντας τις διακυμάνσεις στις πωλήσεις των 5 κορυφαίων προϊόντων, εντοπίζουμε **μεγάλη διασπορά**. Για παράδειγμα το *PACK OF 72 RETROSPOT CAKE CASES* έχει τη μεγαλύτερη διασπορά και ένα από τα μεγαλύτερα box, πράγμα που σημαίνει ότι πωλείται σε **μεταβαλλόμενες** ποσότητες. Αντίθετα, το *VICTORIAN GLASS HANGING T-LIGHT* έχει σχετικά μικρότερη διακύμανση, κάτι που σημαίνει ότι πωλείται σε πιο **σταθερές** ποσότητες.
+
+
+### *Γράφημα 3:* **Πωλήσεις προϊόντων στις 6 χώρες με την μεγαλύτερη Ζήτηση**
+
+```{r}
+histData <- subset(onlineRetail, UnitPrice < 2000 & Quantity < 5000 & Country != "United Kingdom")
+
+country_summary <- aggregate(UnitPrice ~ Country, data = histData, sum)
+country_summary <- country_summary[order(-country_summary$UnitPrice), ]
+top_countries <- head(country_summary, 6)
+data <- histData[histData$Country %in% top_countries$Country, ]
+
+ggplot(data, aes(UnitPrice)) +
+  geom_histogram(binwidth=500, fill = "orange", color = "black") +
+  facet_wrap(~Country, ncol = 6)+
+  labs(
+    title = "Histogram of Product Prices per Country (Top 6 / Excluding UK)",
+    x = "Country",
+    y = "Unit Price (£)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_blank())
+```
+
+**Σχόλια**
+<br>
+Γνωρίζοντας ότι το κατάστημα εδρεύει στο *Ηνωμένο Βασίλειο*, παρατηρούμε πως η πλειοψηφία των συναλλαγών πραγματοποιείται εντός της ίδιας χώρας. Προκειμένου να εξετάσουμε τις εξαγωγές στις υπόλοιπες χώρες, **αφαιρούμε** το Ηνωμένο Βασίλειο από τα δεδομένα. Επιπλέον, **ταξινομούμε** τις τιμές των προϊόντων ανά χώρα και κρατάμε τις 6 χώρες που αγοράζουν τα ακριβότερα προϊόντα. Από το διάγραμμα παρατηρούμε ότι οι ακριβότερες εξαγωγές γίνονται κυρίως σε οικονομικά ισχυρές χώρες της Ευρωπαϊκής Ένωσης. Αυτό το συμπέρασμα μπορεί να βοηθήσει το κατάστημα να στραφεί σε αγορές, που η αγοραστική δύναμη των καταναλωτών είναι υψηλή.
+
+
+### *Γράφημα 4:* **Συνολικές πωλήσεις προϊόντων ανά μήνα**
+
+```{r}
+onlineRetail$YearMonth <- format(onlineRetail$InvoiceDate, "%Y-%m")
+sales_per_month <- aggregate(UnitPrice * Quantity ~ YearMonth, data = onlineRetail, sum)
+colnames(sales_per_month) <- c("Month", "TotalSales")
+
+ggplot(sales_per_month, aes(Month, TotalSales)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(
+    title = "Bar Chart Total Sales per Month",
+    x = "Year-Month",
+    y = "Total Sales (£)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 50, hjust = 1)) 
+```
+
+**Σχόλια**
+<br>
+Το διάγραμμα παρέχει μια ετήσια συνολική εικόνα της πορείας των πωλήσεων και βοηθά την εταιρεία να αναγνωρίζει τις εποχικές τάσεις της αγοράς. Γενικότερα παρατηρείται μία **αύξηση** στις πωλήσεις κατά την *φθινοπωρινή* περίοδο του έτους και αντίστοιχα **μείωση** κατά τους *καλοκαιρινούς* μήνες. Η απότομη μείωση των πωλήσεων τον Δεκέμβριο του 2011 οφείλεται στην έλλειψη δεδομένων για τον μήνα αυτόν, καθώς οι εγγραφές του dataset περιορίζονται μέχρι και τις 9/12. Η κατανόηση των τάσεων των πωλήσεων είναι εξαιρετικά σημαντική για την ερμηνεία της μεγάλης διασποράς στις πωλήσεις των προϊόντων και την πρόβλεψη της μελλοντικής ζήτησης.
