@@ -1,0 +1,501 @@
+---
+title: "Bank Marketting Logistic Regression"
+author: "Χρήστος Γιαμακίδης Κιοσσές (ics21018)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: darkly
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Εισαγωγή
+
+### Περιγραφή του Dataset
+
+Το [**Bank Marketing**](https://archive.ics.uci.edu/dataset/222/bank+marketing) κοινοποιήθηκε στις 11/5/2015 στην *UC Irvine Machine Learning Repository*, ένα αποθετήριο βάσεων, συνόλων δεδομένων και θεωριών πεδίων. Προέρχεται από μία καμπάνια άμεσου μάρκετινγκ πορτογαλικής τράπεζας και περιλαμβάνει πληροφορίες για πελάτες στους οποίους προτάθηκε τηλεφωνικά να κάνουν μια **προθεσμιακή κατάθεση (term deposit)** στον λογαρισμό τους. Το dataset περιέχει 45.211 εγγραφές (πελάτες) και 17 μεταβλητές, τόσο δημογραφικές όσο και άλλες σχετικές με την προηγούμενη επικοινωνία του πελάτη με την τράπεζα.
+
+### Επιχειρηματική Αναλυτική
+
+Η ανάλυση των δεδομένων του dataset βοηθά την επιχείρηση να κατανοήσει ποιοι παράγοντες επηρεάζουν την απόφαση των πελατών να *αποδεχτούν* ή να *αρνηθούν* την πρόταση για προθεσμιακή κατάθεση. Έτσι, η τράπεζα μπορεί να **βελτιστοποιήσει** τις καμπάνιες μάρκετινγκ και να στοχεύσει αποτελεσματικότερα στους πελάτες με μεγαλύτερη πιθανότητα αποδοχής.
+
+
+## Περιγραφή των Μεταβλητών
+
+```{r, include=FALSE}
+library(readr)
+library(knitr)
+library(lubridate)
+library(kableExtra)
+
+bank_data <- read.csv("bank.csv", sep = ";", header = TRUE)
+
+stats <- data.frame(
+  Variable = c("Age", "Job", "Marital", "Education", "Default", "Balance", "Housing", "Loan"),
+  Description = c(
+    "Ηλικία", "Επάγγελμα", "Οικογενειακή κατάσταση", "Εκπαίδευση", "Πιστωτικό υπόλοιπο δανείων σε καθυστέρηση", "Μέσο ετήσιο υπόλοιπο", "Στεγαστικό δάνειο", "Προσωπικό δάνειο"),
+  Type = c("Αριθμητική", "Κατηγορική", "Κατηγορική", "Κατηγορική", "Κατηγορική", "Αριθμητική", "Κατηγορική", "Κατηγορική"),
+  Range = c(
+    paste(range(bank_data$age), collapse = " - "),
+    paste(levels(factor(bank_data$job)), collapse = ", "),
+    paste(levels(factor(bank_data$marital)), collapse = ", "),
+    paste(levels(factor(bank_data$education)), collapse = ", "),
+    paste(levels(factor(bank_data$default)), collapse = ", "),
+    paste(range(bank_data$balance), collapse = " - "),
+    paste(levels(factor(bank_data$housing)), collapse = ", "),
+    paste(levels(factor(bank_data$loan)), collapse = ", ")
+  ),
+  Measurement_Unit = c("Έτη", "-", "-", "-", "-", "Ευρώ (€)", "-", "-")
+)
+```
+
+```{r, echo=FALSE}
+
+kable(stats, 
+      align = rep("c", ncol(stats)),
+      col.names = c("Μεταβλητή", "Περιγραφή", "Τύπος", "Εύρος", "Μονάδα Μέτρησης"),
+      caption = "Αναλυτικός πίνακας με τα στοιχεία των πελατών της τράπεζας:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(stats), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(stats), color = "white") %>%
+  kable_paper(full_width = FALSE, html_font = "inherit")
+
+```
+
+
+```{r, include=FALSE}
+
+stats <- data.frame(
+  Variable = c("Contact", "Day", "Month", "Duration", "Campaign"),
+  Description = c(
+    "Τρόπος επικοινωνίας κατά την καμπάνια", "Ημέρα τελευταίας επικοινωνίας", "Μήνας τελευταίας επικοινωνίας", "Διάρκεια τελευταίας επικοινωνίας", "Πλήθος κλήσεων κατά την τρέχουσα καμπάνια με τον πελάτη"),
+  Type = c("Κατηγορική", "Αριθμητική", "Κατηγορική", "Αριθμητική", "Αριθμητική"),
+  Range = c(
+    paste(levels(factor(bank_data$contact)), collapse = ", "),
+    paste(range(bank_data$day), collapse = " - "),
+    paste(levels(factor(bank_data$month)), collapse = ", "),
+    paste(range(bank_data$duration), collapse = " - "),
+    paste(range(bank_data$campaign), collapse = " - ")
+  ),
+  Measurement_Unit = c("-", "Ημέρες", "-", "Δευτερόλεπτα", "Αριθμός κλήσεων")
+)
+```
+
+```{r, echo=FALSE}
+kable(stats, 
+      align = rep("c", ncol(stats)),
+      col.names = c("Μεταβλητή", "Περιγραφή", "Τύπος", "Εύρος", "Μονάδα Μέτρησης"),
+      caption = "Αναλυτικός πίνακας με τα στοιχεία της επικοινωνίας του πελάτη με την τράπεζα κατά την τρέχουσα καμπάνια:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(stats), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(stats), color = "white") %>%
+  kable_paper(full_width = FALSE, html_font = "inherit")
+
+```
+
+
+```{r, include=FALSE}
+
+stats <- data.frame(
+  Variable = c("Pdays", "Previous", "Poutcome", "Y"),
+  Description = c(
+    "Ημέρες από την τελευταία επικοινωνία που είχε ο πελάτης με προηγούμενη καμπάνια", "Πλήθος προηγούμενων επικοινωνιών με τον πελάτη πριν την καμπάνια", "Αποτέλεσμα προηγούμενης καμπάνιας", "Προθεσμιακή κατάθεση πελάτη"),
+  Type = c("Αριθμητική", "Αριθμητική", "Κατηγορική", "Κατηγορική"),
+  Range = c(
+    paste(range(bank_data$pdays), collapse = " - "),
+    paste(range(bank_data$previous), collapse = " - "),
+    paste(levels(factor(bank_data$poutcome)), collapse = ", "),
+    paste(levels(factor(bank_data$y)), collapse = ", ")
+  ),
+  Measurement_Unit = c("Ημέρες", "Αριθμός κλήσεων", "-", "-")
+)
+```
+
+```{r,echo=FALSE}
+kable(stats, 
+      align = rep("c", ncol(stats)),
+      col.names = c("Μεταβλητή", "Περιγραφή", "Τύπος", "Εύρος", "Μονάδα Μέτρησης"),
+      caption = "Αναλυτικός πίνακας με τα στοιχεία προηγούμενων κλήσεων του πελάτη με την τράπεζα:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(stats), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(stats), color = "white") %>%
+  kable_paper(full_width = FALSE, html_font = "inherit")
+
+```
+
+
+## Έλεγχος εγκυρότητας του dataset
+
+**Ελλιπείς Τιμές**
+```{r}
+cat(sum(is.na(bank_data)))
+```
+
+**Διπλότυπες Εγγραφές**
+```{r}
+cat(sum(duplicated(bank_data)))
+```
+
+
+## Λογιστική Παλινδρόμηση
+
+Κατανομή των τιμών της *εξαρτημένης* μεταβλητής Y του dataset:
+```{r}
+table(bank_data$y)
+```
+
+```{r}
+baseaccprop <- (39922/45211)*100
+cat(round(baseaccprop, digits = 1))
+```
+**Σχόλιο**
+<br>
+Παρατηρείται πως μόνο οι 5.289 πελάτες από τους 45.211 (δηλαδή το 11.7%) έχουν κάνει προθεσμιακή κατάθεση μέσω προωθητικών ενεργειών της τράπεζας. Έαν λοιπόν προβλέψουμε ότι κανείς δεν θα προχωρήσει σε προθεσμιακή κατάθεση τότε σύμφωνα με την μέθοδο της **απλής βάσης** θα πετύχουμε το αποτέλεσμα με ακρίβεια της τάξης του *88.3%*. Αυτή η προσέγγιση αγνοεί πλήρως τις θετικές περιπτώσεις, οι οποίες είναι αυτές που μας ενδιαφέρουν. Γι' αυτό με τη λογιστική παλινδρόμηση στοχεύουμε στην καλύτερη ικανότητα αναγνώρισης των πελατών που είναι πιθανό να προχωρήσουν σε προθεσμιακή κατάθεση, δηλαδή να αυξήσουμε τη σωστή πρόβλεψη του 11.7%.
+
+### Προετοιμασία των δεδομένων
+
+Μετατρέπουμε όλες τις μεταβλητές τύπου character σε factor. 
+```{r}
+bank_data$y <- ifelse(bank_data$y == "yes", 1, 0)
+bank_data$job <- as.factor(bank_data$job)
+bank_data$marital <- as.factor(bank_data$marital)
+bank_data$education <- as.factor(bank_data$education)
+bank_data$default <- as.factor(bank_data$default)
+bank_data$housing <- as.factor(bank_data$housing)
+bank_data$loan <- as.factor(bank_data$loan)
+bank_data$contact <- as.factor(bank_data$contact)
+bank_data$month <- as.factor(bank_data$month)
+bank_data$poutcome <- as.factor(bank_data$poutcome)
+```
+
+### Διαχωρισμός του dataset σε training και testing sets
+
+Χωρίζουμε το dataset με τυχαίο τρόπο σε δύο ξεχωριστά αρχεία **train** και **test**. Το train αποτελεί το 65% της βάσης και ορίζουμε το **seed** σε 918 καθιστώντας τον τυχαίο διαχωρισμό train/test σταθερό σε κάθε εκτέλεση του κώδικα. Το train χρησιμοποιείται για τη δημιουργία του μοντέλου μας και το test για να μετρήσουμε πως αυτό λειτουργεί για δεδομένα εκτός του train.
+
+```{r}
+library(caTools)
+
+set.seed(918)  
+split <- sample.split(bank_data$y, SplitRatio = 0.65)
+train <- subset(bank_data, split == TRUE)
+test <- subset(bank_data, split == FALSE)
+
+cat("Train set:", nrow(train), "πελάτες | Test set:", nrow(test), "πελάτες")
+
+```
+
+### Δημιουργία Μοντέλου Λογιστικής Παλινδρόμησης
+
+```{r}
+
+model_logit <- glm(y ~ ., data = train, family = "binomial")
+summary(model_logit)
+
+```
+
+*Ερμηνεία Συσχετίσεων*
+<br>
+Θεωρούμε στατιστικά σημαντικές τις ανεξάρτητες μεταβλητές που στη στήλη `Pr(>|z|)` έχουν τιμές **<0.001**, δηλαδή αυτές που έχουν *** από δίπλα τους.
+
+```{r, include=FALSE}
+stats <- data.frame(
+  Variable = c("monthmar", "poutcomesuccess", "duration", "jobstudent", "educationtertiary", "housingyes", "loanyes", "campaign", "monthjan", "jobblue-collar", "balance"),
+  Estimate = c(
+    "+1.590", "+2.291", "+0.00419", "+0.382", "+0.379", "−0.675", "−0.425", "−0.0908", "−1.262", "−0.310", "+0.0000128"),
+  Pvalue = c("< 2e-16", "< 2e-16", "< 2e-16", "0.000457", "4.88e-07", "< 2e-16", "1.33e-12", "< 2e-16", "< 2e-16", "2.01e-05", "0.0126"),
+  Significance = c("Πάρα πολύ ισχυρή", "Πάρα πολύ ισχυρή", "Πολύ ισχυρή", "Πολύ ισχυρή", "Πολύ ισχυρή", "Πολύ ισχυρή", "Πολύ ισχυρή", "Πολύ ισχυρή", "Πολύ ισχυρή", "Πολύ ισχυρή", "Μέτρια")
+)
+```
+
+```{r, echo=FALSE}
+
+kable(stats, 
+      align = rep("c", ncol(stats)),
+      col.names = c("Μεταβλητή", "Συντελεστής (Estimate)", "P-value", "Επίδραση"),
+      caption = "Στατιστικά σημαντικές μεταβλητές (p < 0.001):") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(stats), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(stats), color = "white") %>%
+  kable_paper(html_font = "inherit")
+
+```
+
+**Παρατηρήσεις:**
+<br>
+
+- Όσο **μεγαλύτερη** είναι η *διάρκεια της τηλεφωνικής επικοινωνίας* με τον πελάτη, τόσο **αυξάνεται** σημαντικά η πιθανότητα αποδοχής της προσφοράς για προθεσμιακή κατάθεση.
+
+- Η προηγούμενη *επιτυχής τηλεφωνική επαφή* με τον πελάτη επηρεάζει **θετικά** την αποδοχή της προσφοράς για προθεσμιακή κατάθεση, υποδεικνύοντας πως υπάρχει θετική εμπειρία.
+
+- Ο *Μάρτιος* σχετίζεται **θετικά** με την επιτυχία του προωθητικού σκοπού, ίσως λόγω εποχικών στρατηγικών marketing.
+
+- Οι *φοιτητές* και οι *απόφοιτοι τριτοβάθμιας εκπαίδευσης* εμφανίζουν **υψηλή πιθανότητα** αποδοχής της προωθητικής ενέργειας, δείχνοντας έτσι τη θετική στάση των ηλικιακά μορφωμένων πελατών.
+
+- Το *υπόλοιπο του λογαριασμού* του πελάτη έχει **μέτρια θετική επίδραση** στην αποδοχή της προθεσμιακής κατάθεσης, υποδηλώνοντας ότι οι οικονομικά εύρωστοι πελάτες είναι πιο δεκτικοί.
+
+- Η ύπαρξη *στεγαστικού* ή και *καταναλωτικού δανείου* σχετίζεται **αρνητικά** με πιθανή προθεσμιακή κατάθεση, ενδεχομένως λόγω οικονομικής στενότητα.
+
+- Οι πελάτες που αναφέρονται ως *εργάτες* δείχνουν **μικρότερη πιθανότητα** αποδοχής της προωθητικής ενέργειας, πιθανώς λόγω χαμηλότερης οικονομικής ευχέρειας ή καχυποψίας.
+
+- Ο *Ιανουάριος* έχει **ισχυρή αρνητική συσχέτιση** με τον προωθητικό σκοπό και μπορεί να σχετίζεται με τη μειωμένη διάθεση για νέες δεσμεύσεις μετά τις γιορτές.
+
+- Το *πλήθος των τηλεφωνικών επικοινωνιών* με τον πελάτη κατά την τρέχουσα καμπάνια έχει **αρνητική συσχέτιση** με την αναμενόμενη έκβαση, δείχνοντας ότι η υπερβολική επιμονή ίσως πετυχαίνει αντίθετο αποτέλεσμα.
+
+### Διαδικασία αφαίρεσης μεταβλητών
+
+Με βάση τον παραπάνω πίνακα, αφαιρούμε από το τελικό μοντέλο της λογιστικής παλινδρόμησης τις λιγότερο στατιστικά σημαντικές ανεξάρτητες μεταβλητές *age*, *pdays*, *default* και *previous*.
+
+```{r}
+model_logit2 <- glm(y ~ job + marital + education + balance + housing + loan + contact + day + month + duration + campaign + poutcome, data = train, family = "binomial")
+summary(model_logit2)
+
+```
+**Σχόλιο**
+<br>
+Όπως φαίνεται και από τον δείκτη AIC, το δεύτερο μοντέλο λογιστικής παλινδρόμησης προβλέπει ελάχιστα καλύτερα την πιθανότητα της επιβίωσης.
+
+- **LRmodel**: AIC = 14178
+
+- **LRmodel2**: AIC = 14173
+
+### Διαγράμματα Συσχετίσεων
+```{r, message=FALSE}
+library(ggplot2)
+ggplot(train, aes(duration, y, color = month)) + 
+  geom_point() +
+  geom_smooth(method = "glm", method.args = list(family = "binomial")) +
+  labs(title = "Logistic Regression Plot for duration and month",
+       x = "Independent Variable (duration)",
+       y = "Probability") +
+  theme_minimal()
+
+```
+
+**Σχόλια**
+<br>
+Παρατηρείται **θετική συσχέτιση** μεταξύ *duration* και της *πιθανότητας θετικής απάντησης* του πελάτη για προθεσμιακή κατάθεση, καθώς όσο αυξάνεται η διάρκεια της κλήσης, τόσο αυξάνεται και η πιθανότητα θετικής απάντησης στην τράπεζα. Η **κλίση** της γραμμής δείχνει ότι η duration είναι από τους σημαντικότερους θετικούς προβλεπτικούς παράγοντες, όπως είχε φανεί και στη λογιστική παλινδρόμηση (estimate ≈ +0.00419, p < 2e-16). Το χρώμα μας δείχνει πώς διαφέρει η συμπεριφορά της πιθανότητας ανά μήνα. Ορισμένοι μήνες (π.χ. Μάρτιος, Οκτώβριος, Σεπτέμβριος) μπορεί να έχουν **υψηλότερες πιθανότητες** θετικής απάντησης σε **ίδιες τιμές** duration, κάτι που υποδηλώνει πιθανή εποχιακή επίδραση. Η κατανομή των σημείων δείχνει ότι οι περισσότερες επαφές έχουν διάρκεια μικρότερη από 600–800 δευτερόλεπτα, ενώ μεγαλύτερες διάρκειες είναι σπανιότερες αλλά πολύ πιο αποτελεσματικές.
+
+```{r, message=FALSE}
+ggplot(train, aes(campaign, y, color = job)) + 
+  geom_point() +
+  geom_smooth(method = "glm", method.args = list(family = "binomial")) +
+  labs(title = "Logistic Regression Plot for campaign and job",
+       x = "Independent Variable (campaign)",
+       y = "Probability") +
+  theme_minimal()
+
+```
+
+**Σχόλια**
+<br>
+Υπάρχει **αρνητική συσχέτιση** ανάμεσα στο *πλήθος των κλήσεων* κατά την τρέχουσα καμπάνια με τον πελάτη και στην *πιθανότητα αποδοχής* της προωθητικής ενέργειας για προθεσμιακή κατάθεση. Πρακτικά, όσο περισσότερες είναι οι τηλεφωνικές επαφές, τόσο μικρότερη είναι η πιθανότητα επιτυχίας, κάτι που υποδεικνύει την έννοια του “ενοχλητικού” marketing. Αυτό συμφωνεί με τη λογιστική παλινδρόμηση (estimate −0.0908, p < 2e-16), που δείχνει ότι η campaign επηρεάζει αρνητικά την έκβαση. Επίσης η πιθανότητα επιτυχίας διαφέρει ανάλογα με το **επάγγελμα**. Για παράδειγμα, φοιτητές (student) και συνταξιούχοι (retired) φαίνεται να έχουν *υψηλότερη* πιθανότητα θετικής απάντησης χωρίς πολλές τηλεφωνικές επικοινωνίες με την τράπεζα. Αντίθετα, οι εργάτες (blue-collar) έχουν *χαμηλότερη* συνολική πιθανότητα αποδοχής της προωθητικής ενέργειας και φαίνεται να επηρεάζονται περισσότερο αρνητικά από τις πολλές τηλεφωνικές επικοινωνίες.
+
+## Προβλέψεις τιμών σε test και train set
+
+```{r}
+
+predictTest <- predict(model_logit2, newdata = test, type = "response")
+head(predictTest)
+cat("Μέση Τιμή: ", mean(predictTest), "\n", "Εύρος Τιμών: ", range(predictTest))
+
+predictTrain <- predict(model_logit2, newdata = train, type='response')
+tapply(predictTrain, factor(train$y, levels = c(0, 1), labels = c("no", "yes")), mean)
+
+```
+
+**Σχόλια**
+<br>
+
+- Η συνάρτηση *predict* με type = "response" επιστρέφει τιμές μεταξύ 0 και 1, οι οποίες εκφράζουν την πιθανότητα το αποτέλεσμα του y να είναι "yes" για κάθε παρατήρηση του test.
+
+- Η συνάρτηση *tapply* ομαδοποιεί αυτές τις πιθανότητες με βάση την πραγματική τιμή του y στο training set και υπολογίζει το μέσο όρο ανά κατηγορία (0 ή 1).
+
+- Τα αποτελέσματα από την πρόβλεψη του μοντέλου λογιστικής παλινδρόμησης για το test set δείχνουν πολύ **χαμηλές πιθανότητες** (όλες κάτω από 1%, μέση τιμή ~ 0,12%) για το ενδεχόμενο ένας πελάτης να προχωρήσει σε προθεσμιακή κατάθεση, γεγονός που αντικατοπτρίζει την *ανισορροπία* της εξαρτημένης μεταβλητής y και την τάση του μοντέλου να προβλέπει κυρίως την **κυρίαρχη** κατηγορία no.
+
+- Η μέση προβλεπόμενη πιθανότητα για τους πελάτες που δεν έκαναν προθεσμιακή κατάθεση είναι περίπου 7.9%, ενώ αντίθετα για όσους έκαναν είναι 40.1%. Αυτό δείχνει ότι το μοντέλο μπορεί να διαφοροποιήσει ικανοποιητικά τις δύο κατηγορίες, αν και οι προβλεπόμενες τιμές παραμένουν γενικά χαμηλές, κάτι που οφείλεται και στην έντονη ανισορροπία του dataset.
+
+## Confusion Matrix
+
+```{r}
+threshold <- 0.5
+pred_class <- ifelse(predictTest >= threshold, "yes", "no")
+pred_class <- factor(pred_class, levels = c("no", "yes"))
+actual_class <- factor(test$y, levels = c(0, 1), labels = c("no", "yes"))
+
+conf_mat <- table(Predicted = pred_class, Actual = actual_class)
+print(conf_mat)
+```
+
+**Σχόλια**
+<br>
+
+- Ο πίνακας **confusion matrix** δείχνει την απόδοση του μοντέλου λογιστικής παλινδρόμησης στο test set με *κατώφλι* πρόβλεψης 0.5.
+
+- Από τις 13.973 περιπτώσεις όπου η πραγματική τιμή ήταν "no", το μοντέλο προέβλεψε σωστά τις 13.627 και έκανε 346 false positives.
+
+- Από τις 1.851 περιπτώσεις με πραγματική τιμή "yes", το μοντέλο προέβλεψε σωστά μόνο 678 και έχασε 1.173 περιπτώσεις (false negatives).
+
+- Το μοντέλο είναι πολύ καλό στον εντοπισμό των αρνητικών απαντήσεων, αλλά έχει χαμηλότερη ικανότητα στην πρόβλεψη των θετικών. Αυτό είναι αναμενόμενο, καθώς πρόκειται για μη ισορροπημένο dataset: μόνο το 11.7% των παρατηρήσεων είναι "yes".
+
+## Υπολογισμός Μετρικών
+```{r, echo=FALSE}
+metrics <- list(
+  Accuracy = sum(diag(conf_mat)) / sum(conf_mat),
+  Sensitivity = conf_mat["yes", "yes"] / sum(conf_mat[, "yes"]),
+  Specificity = conf_mat["no", "no"] / sum(conf_mat[, "no"]),
+  Baseline = sum(actual_class == "no") / length(actual_class)
+)
+
+metrics_df <- data.frame(
+  Metric = c("Accuracy", "Sensitivity", "Specificity", "Baseline Accuracy"),
+  Formula = c("(TP + TN) / (TN + FP + FN + TP)", "TP / (TP + FN)", "TN / (TN + FP)", "(TN + FP) / (TN + FP + FN + TP)"),
+  Value = round(unlist(metrics), 3)
+)
+
+kable(metrics_df, 
+      row.names = FALSE,
+      align = rep("l", ncol(metrics_df)),
+      col.names = c("Μετρική", "Τύπος", "Τιμή"),
+      caption = "Αναλυτικός πίνακας μετρικών απόδοσης:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "l", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(metrics_df), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(metrics_df), color = "white") %>%
+  kable_paper(html_font = "inherit")
+```
+
+**Σχόλια**
+<br>
+
+- **Accuracy: ** Πολύ υψηλή ακρίβεια, όμως επηρεάζεται από την ανισορροπία των κλάσεων.
+
+- **Sensitivity (True Positive Rate): ** Το μοντέλο εντοπίζει μόνο το 36.6% των θετικών απαντήσεων (yes). Αυτό είναι αρκετά χαμηλό και σημαίνει πως πολλοί πελάτες που θα προχωρούσαν σε προθεσμιακή κατάθεση δεν προβλέπονται σωστά
+
+- **Specificity (True Negative Rate): ** Το μοντέλο προβλέπει σωστά σχεδόν όλους όσους δεν κάνουν κατάθεση ("no").
+
+- **Baseline Accuracy: ** Αν προβλέπαμε πάντα "no", θα είχαμε 88.3% ακρίβεια. Το μοντέλο λογιστικής παλινδρόμησης βελτιώνει ελάχιστα την baseline accuracy (από 88.3% σε 90.4%), αλλά με κόστος τη χαμηλή ευαισθησία.
+
+**Συμπέρασμα:**
+Γενικότερα το μοντέλο είναι υψηλής ακρίβειας, αλλά δεν είναι καλό στην πρόβλεψη των πελατών που ανταποκρίνονται θετικά στην προωθητική ενέργεια. Συνεπώς θα πρέπει να μειωθεί το κατώφλι έτσι ώστε το μοντέλο να μπορεί να προβλέψει με μεγαλύτερη ακρίβεια τις περιπτώσεις αυτές. 
+
+```{r}
+threshold <- 0.2
+pred_class <- ifelse(predictTest >= threshold, "yes", "no")
+pred_class <- factor(pred_class, levels = c("no", "yes"))
+actual_class <- factor(test$y, levels = c(0, 1), labels = c("no", "yes"))
+
+conf_mat <- table(Predicted = pred_class, Actual = actual_class)
+print(conf_mat)
+```
+
+**Σχόλια**
+<br>
+
+- Ο νέος πίνακας **confusion matrix** δείχνει την απόδοση του μοντέλου λογιστικής παλινδρόμησης στο test set με *κατώφλι* πρόβλεψης 0.2.
+
+- Από τις 13.973 περιπτώσεις όπου η πραγματική τιμή ήταν "no", το μοντέλο προέβλεψε σωστά τις 12.762 και έκανε 1.211 false positives.
+
+- Από τις 1.851 περιπτώσεις με πραγματική τιμή "yes", το μοντέλο προέβλεψε σωστά μόνο 1.258 και έχασε 593 περιπτώσεις (false negatives).
+
+- Το μοντέλο βελτειώθηκε στην πρόβλεψη των θετικών απαντήσεων, όπως άλλωστε ήταν και το αναμενόμενο, θυσιάζοντας κάποια true negatives.
+
+```{r, echo=FALSE}
+metrics <- list(
+  Accuracy = sum(diag(conf_mat)) / sum(conf_mat),
+  Sensitivity = conf_mat["yes", "yes"] / sum(conf_mat[, "yes"]),
+  Specificity = conf_mat["no", "no"] / sum(conf_mat[, "no"]),
+  Baseline = sum(actual_class == "no") / length(actual_class)
+)
+
+metrics_df <- data.frame(
+  Metric = c("Accuracy", "Sensitivity", "Specificity", "Baseline Accuracy"),
+  Formula = c("(TP + TN) / (TN + FP + FN + TP)", "TP / (TP + FN)", "TN / (TN + FP)", "(TN + FP) / (TN + FP + FN + TP)"),
+  Value = round(unlist(metrics), 3)
+)
+
+kable(metrics_df, 
+      row.names = FALSE,
+      align = rep("l", ncol(metrics_df)),
+      col.names = c("Μετρική", "Τύπος", "Τιμή"),
+      caption = "Αναλυτικός πίνακας μετρικών απόδοσης:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "l", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(metrics_df), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(metrics_df), color = "white") %>%
+  kable_paper(html_font = "inherit")
+```
+
+**Σχόλια**
+<br>
+**Sensitivity (True Positive Rate): ** Το μοντέλο εντοπίζει πλέον το 68% των θετικών απαντήσεων (yes).
+
+## Μοντέλο ROCpred
+
+Δημιουργούμε το μοντέλο ROCpred.
+```{r}
+library(ROCR)
+ROCRpred <- prediction(predictTest, test$y)
+```
+
+## Καμπύλη ROC και AUC
+```{r}
+ROCRperf <- performance(ROCRpred, "tpr", "fpr")
+
+plot(ROCRperf, colorize = TRUE, print.cutoffs.at = c(0.2, 0.5, 0.8),
+     main = "ROC Curve", xlab = "Specificity", ylab = "Sensitivity")
+
+auc <- performance(ROCRpred, "auc")@y.values[[1]]
+cat("AUC:", round(auc, 3), "\n")
+```
+
+**Σχόλια**
+<br>
+
+- Κάθε χρώμα της καμπύλης αντιστοιχεί σε διαφορετική τιμή κατωφλιού πρόβλεψης.
+
+- Οι αριθμοί που εμφανίζονται (π.χ. 0.2, 0.5, 0.8) είναι τα σημεία όπου το print.cutoffs.at ζητά να εμφανιστούν οι αντίστοιχες τιμές κατωφλίου πάνω στην καμπύλη.
+
+- Παρατηρούμε πως όσο μειώνεται η τιμή του κατωφλιού, τόσο αυξάνεται το Sensitivity, δηλαδή το ποσοστό πρόβλεψης των θετικών απαντήσεων.
+
+- Η AUC (Area Under the Curve) είναι το εμβαδόν της περιοχής κάτω από την καμπύλη ROC και μας δίνει μια απόλυτη τιμή της ποιότητας πρόβλεψης. Στο παράδειγμα αυτό **AUC = 0.909** που σημαίνει ότι το μοντέλο προβλέπει με ακρίβεια **90.9%**.
