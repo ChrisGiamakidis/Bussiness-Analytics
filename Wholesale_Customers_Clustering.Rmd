@@ -1,0 +1,428 @@
+---
+title: "Wholesale Customers Clustering"
+author: "Χρήστος Γιαμακίδης Κιοσσές"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: darkly
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Εισαγωγή
+
+### Περιγραφή του Dataset
+
+Το [**Wholesale customers**](https://archive.ics.uci.edu/dataset/292/wholesale+customers) κοινοποιήθηκε στις 30/3/2014 στο *UC Irvine Machine Learning Repository*, ένα αποθετήριο βάσεων, συνόλων δεδομένων και θεωριών πεδίων. Εντάσσεται στον χώρο της μηχανικής μάθησης και χρησιμοποιείται για σκοπούς ταξινόμησης και επίδειξης αλγορίθμων συσταδοποίησης. Αναφέρεται σε πελάτες ενός χονδρεμπόρου και περιλαμβάνει τις ετήσιες δαπάνες σε χρηματικές μονάδες (μ.μ.) για διάφορες κατηγορίες προϊόντων.
+
+### Επιχειρηματική Αναλυτική
+
+Η ανάλυση των δεδομένων του dataset μας επιτρέπει να κατηγοριοποιήσουμε πελάτες χονδρικού εμπορίου, με βάση τις αγοραστικές τους συνήθειες σε διάφορα είδη προϊόντων. Μέσω της συσταδοποίησης, μπορούμε να εντοπίσουμε ομάδες πελατών με παρόμοια συμπεριφορά, γεγονός που συμβάλλει στη 
+**στοχευμένη εμπορική στρατηγική**, τη **βελτιστοποίηση αποθεμάτων**, τη **διαμόρφωση προγραμμάτων** εκπτώσεων και την **ενίσχυση** της σχέσης με τους πιο κερδοφόρους πελάτες.
+
+## Περιγραφή των Μεταβλητών
+
+Το dataset αποτελείται από 440 εγγραφές και 8 μεταβλητές.
+
+```{r, include=FALSE}
+library(readr)
+library(knitr)
+library(lubridate)
+library(kableExtra)
+
+customers <- read_csv("Wholesale customers data.csv")
+customers$Channel <- factor(customers$Channel, labels = c("Horeca (Hotel/Restaurant/Cafe)", "Retail"))
+customers$Region <- factor(customers$Region, labels = c("Lisbon", "Porto", "Other"))
+
+stats <- data.frame(
+  Variable = c("Channel", "Region", "Fresh", "Milk", "Grocery", "Frozen", "Detergents_Paper", "Delicassen"),
+  Description = c(
+    "Κανάλι Διανομής", "Γεωγραφική Περιοχή", "Ετήσια δαπάνη σε νωπά προϊόντα", "Ετήσια δαπάνη σε γαλακτοκομικά προϊόντα", "Ετήσια δαπάνη σε είδη παντοπωλείου", "Ετήσια δαπάνη σε κατεψυγμένα προϊόντα", "Ετήσια δαπάνη σε απορρυπαντικά και χάρινα προϊόντα", "Ετήσια δαπάνη σε εκλεκτά προϊόντα"),
+  Type = c("Κατηγορική", "Κατηγορική", "Αριθμητική", "Αριθμητική", "Αριθμητική", "Αριθμητική", "Αριθμητική", "Αριθμητική"),
+  Range = c(
+    paste(unique(customers$Channel), collapse = ", "),
+    paste(unique(customers$Region), collapse = ", "),
+    paste(range(customers$Fresh), collapse = " - "),
+    paste(range(customers$Milk), collapse = " - "),
+    paste(range(customers$Grocery), collapse = " - "),
+    paste(range(customers$Frozen), collapse = " - "),
+    paste(range(customers$Detergents_Paper), collapse = " - "),
+    paste(range(customers$Delicassen), collapse = " - ")
+  ),
+  Measurement_Unit = c("-", "-", "Χρηματικές Μονάδες", "Χρηματικές Μονάδες", "Χρηματικές Μονάδες", "Χρηματικές Μονάδες", "Χρηματικές Μονάδες", "Χρηματικές Μονάδες")
+)
+```
+
+```{r, echo=FALSE}
+
+kable(stats, 
+      align = rep("c", ncol(stats)),
+      col.names = c("Μεταβλητή", "Περιγραφή", "Τύπος", "Εύρος", "Μονάδα Μέτρησης"),
+      caption = "Αναλυτικός πίνακας με τις ετήσιες δαπάνες των πελατών:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(stats), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(stats), color = "white") %>%
+  kable_paper(full_width = FALSE, html_font = "inherit")
+
+```
+
+## Έλεγχος εγκυρότητας του dataset
+
+Παρατηρούμε πως το dataset δεν έχει **missing values**, αλλά ούτε και **διπλότυπες εγγραφές**.
+
+**Ελλιπείς Τιμές**
+```{r}
+cat(sum(is.na(customers)))
+```
+
+**Διπλότυπες Εγγραφές**
+```{r}
+cat(sum(duplicated(customers)))
+```
+
+## Περιγραφικά Στατιστικά
+
+### Μέτρα Κεντρικής Τάσης
+
+Αφαιρούμε τις κατηγορικές μεταβλητές *Region* και *Channel*.
+```{r, include=FALSE}
+customers_numeric <- subset(customers, select = -c(Region, Channel))
+summary_stats <- data.frame(
+  Metrics = c("1st Qu.", "Median", "Mean", "3rd Qu."),
+  Fresh = c(
+    quantile(customers_numeric$Fresh, 0.25),
+    median(customers_numeric$Fresh),
+    mean(customers_numeric$Fresh),
+    quantile(customers_numeric$Fresh, 0.75)
+  ),
+  Milk = c(
+    quantile(customers_numeric$Milk, 0.25),
+    median(customers_numeric$Milk),
+    mean(customers_numeric$Milk),
+    quantile(customers_numeric$Milk, 0.75)
+  ),
+  Grocery = c(
+    quantile(customers_numeric$Grocery, 0.25),
+    median(customers_numeric$Grocery),
+    mean(customers_numeric$Grocery),
+    quantile(customers_numeric$Grocery, 0.75)
+  ),
+  Frozen = c(
+    quantile(customers_numeric$Frozen, 0.25),
+    median(customers_numeric$Frozen),
+    mean(customers_numeric$Frozen),
+    quantile(customers_numeric$Frozen, 0.75)
+  ),
+  Detergents_Paper = c(
+    quantile(customers_numeric$Detergents_Paper, 0.25),
+    median(customers_numeric$Detergents_Paper),
+    mean(customers_numeric$Detergents_Paper),
+    quantile(customers_numeric$Detergents_Paper, 0.75)
+  ),
+  Delicassen = c(
+    quantile(customers_numeric$Delicassen, 0.25),
+    median(customers_numeric$Delicassen),
+    mean(customers_numeric$Delicassen),
+    quantile(customers_numeric$Delicassen, 0.75)
+  )
+)
+```
+
+```{r, echo=FALSE}
+
+kable(summary_stats, 
+      align = rep("c", ncol(summary_stats)),
+      col.names = c("Metrics", "Fresh", "Milk", "Grocery", "Frozen", "Detergents_Paper", "Delicassen"),
+      caption = "Συνοπτικά στατιστικά για τις δαπάνες των αριθμητικών μεταβλητή:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(summary_stats), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(summary_stats), color = "white") %>%
+  kable_paper(full_width = FALSE, html_font = "inherit")
+
+```
+
+### Μέτρα Διασποράς
+
+```{r, include=FALSE}
+distribution_stats <- data.frame(
+  Metrics = c("Standard Deviation", "Sample Variance"),
+  Fresh = c(
+    sd(customers_numeric$Fresh),
+    var(customers_numeric$Fresh)
+  ),
+  Milk = c(
+    sd(customers_numeric$Milk),
+    var(customers_numeric$Milk)
+  ),
+  Grocery = c(
+    sd(customers_numeric$Grocery),
+    var(customers_numeric$Grocery)
+  ),
+  Frozen = c(
+    sd(customers_numeric$Frozen),
+    var(customers_numeric$Frozen)
+  ),
+  Detergents_Paper = c(
+    sd(customers_numeric$Detergents_Paper),
+    var(customers_numeric$Grocery)
+  ),
+  Delicassen = c(
+    sd(customers_numeric$Delicassen),
+    var(customers_numeric$Delicassen)
+  )
+)
+```
+
+```{r, echo=FALSE}
+
+kable(distribution_stats, 
+      align = rep("c", ncol(distribution_stats)),
+      col.names = c("Metrics", "Fresh", "Milk", "Grocery", "Frozen", "Detergents_Paper", "Delicassen"),
+      caption = "Συνοπτικά στατιστικά για τις δαπάνες των αριθμητικών μεταβλητών:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(distribution_stats), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(summary_stats), color = "white") %>%
+  kable_paper(full_width = FALSE, html_font = "inherit")
+
+```
+
+## Διαγράμματα Συσχετίσεων
+
+```{r, include=FALSE}
+library(ggplot2)
+```
+
+### *Γράφημα 1:* **Ετήσιες δαπάνες σε γαλακτοκομικά προϊόντα και είδη παντοπωλείου ανά κανάλι διανομής**
+
+```{r}
+ggplot(customers, aes(x = Milk, y = Grocery, color = Channel)) +
+  geom_point(alpha = 0.7) +
+  scale_x_log10() + scale_y_log10() +
+  labs(title = "Milk vs Grocery κατά Channel", x = "Milk (log)", y = "Grocery (log)")
+
+```
+
+**Σχόλιο**
+<br>
+Παρατηρείται ότι οι ελεύθεροι επαγγελματίες (λιανικό εμπόριο) τείνουν να έχουν **υψηλότερες** δαπάνες σε αγορές γαλακτοκομικών προϊόντων και σε είδη παντοπωλείου, σε σύγκριση με τους κατόχους ξενοδοχείων/εστιατορίων/καφέ. Υπάρχει **θετική συσχέτιση** μεταξύ των αγορών σε γαλακτοκομικά προϊόντα και σε είδη παντοπωλείου, δηλαδή όσο αυξάνονται οι αγορές σε γάλα, αυξάνονται και σε είδη παντοπωλείου. Αυτό υποδεικνύει ότι οι δύο κατηγορίες προϊόντων αγοράζονται συχνά **παράλληλα**, πιθανώς για βασική λειτουργία του καταστήματος. Φαίνεται ότι υπάρχουν περιοχές υψηλής συγκέντρωσης σημείων, κυρίως γύρω από μεσαίες τιμές σε Milk και Grocery. Αυτό αφήνει υποσχέσεις ότι μπορεί να υπάρχουν φυσικά clusters τα οποία μπορούν να αποκαλυφθούν με συσταδοποίηση.
+
+### *Γράφημα 2:* **Κατανομή των ετήσιων δαπανών σε νωπά προϊόντα ανά περιοχή**
+
+```{r}
+ggplot(customers, aes(x = Region, y = Fresh, fill = Region)) +
+  geom_boxplot() +
+  labs(title = "Fresh ανά Region", y = "Fresh (log)", x = "") +
+  theme_minimal()
+
+```
+
+**Σχόλιο**
+<br>
+Η μεταβλητή Fresh παρουσιάζει **μεγάλη διασπορά** και στις τρεις περιοχές, κάτι που φαίνεται από το μεγάλο εύρος των boxplots και τις πολλές ακραίες τιμές. Οι διάμεσοι των τριών περιοχών είναι σχετικά παρόμοιες, γεγονός που δείχνει ότι η τοποθεσία δεν είναι καθοριστικός παράγοντας για τη *μέση* αγορά νωπών προϊόντων. Συνεπώς η μεταβλητή Region ενδέχεται να μην αποτελεί πρωτεύοντα διαχωριστικό παράγοντα για συστάδες με βάση το Fresh. Ωστόσο, αν συνδυαστεί με άλλες μεταβλητές μπορεί να δώσει χρήσιμη πληροφορία.
+
+### *Γράφημα 3:* **Κατανομή των ετήσιων δαπανών σε κατεψυγμένα προϊόντα ανά περιοχή**
+
+```{r}
+ggplot(customers, aes(x = Region, y = Frozen, fill = Region)) +
+  geom_col() +
+  labs(title = "Frozen ανά Region", y = "Frozen", x = "") +
+  theme_minimal()
+
+```
+
+**Σχόλιο**
+<br>
+Η κατηγορία Other συγκεντρώνει τις **υψηλότερες** συνολικές δαπάνες σε κατεψυγμένα προϊόντα, πιθανότατα λόγω του μεγαλύτερου αριθμού πελατών και περιοχών που περιλαμβάνει, σε σχέση με τη Λισαβόνα και το Πόρτο. Οι δύο μεγάλες πόλεις παρουσιάζουν παρόμοιες, αλλά αισθητά χαμηλότερες τιμές.  Ωστόσο, επειδή το διάγραμμα βασίζεται σε αθροιστικά ποσά, δεν αποτυπώνει την κατανάλωση ανά πελάτη.
+
+
+## Συσταδοποίηση
+
+### Προετοιμασία των δεδομένων
+
+Προκειμένου να εφαρμόσουμε clustering στο dataset μας, πρέπει να **κανονικοποιήσουμε** τα δεδομένα ώστε να έχουν μέσο όρο 0 και τυπική απόκλιση 1. Με τον τρόπο αυτό, και έχοντας αφαιρέσει τις κατηγορικές μεταβλητές, όλες οι αριθμητικές μεταβλητές παίρνουν την ίδια κλίμακα και αυτές με μεγάλο εύρος δεν μπορούν πλέον να επηρεάσουν υπερβολικά τα αποτελέσματα.
+
+```{r}
+customers_numeric <- subset(customers, select = -c(Region, Channel))
+customers_scaled <- scale(customers_numeric)
+```
+
+### Ιεραρχική Συσταδοποίηση
+
+```{r}
+distances <- dist(customers_scaled, method = "euclidean")
+clusterCustomers <- hclust(distances, method = "ward.D2")
+```
+
+**Σχόλια**
+<br>
+Υπολογίζουμε τις αποστάσεις μεταξύ όλων των παρατηρήσεων στο dataset, αξιοποιώντας την ευκλείδεια απόσταση. Η μέθοδος ward χρησιμοποιείται για να υπολογίσουμε απόσταση μεταξύ των κέντρων των συστάδων.
+
+```{r}
+plot(clusterCustomers, labels = FALSE, main = "Hierarchical Clustering Dendrogram")
+```
+
+**Σχόλιο**
+<br>
+Το δενδροδιάγραμμα δείχνει τη διαδικασία συγχώνευσης των datapoints σε ομάδες. Κάθε κατακόρυφη γραμμή αντιστοιχεί στην απόσταση συγχώνευσης δύο clusters και όσο μεγαλύτερο είναι το ύψος, τόσο μεγαλύτερη η διαφορά μεταξύ των ομάδων που συγχωνεύονται. Θα πρέπει να κόψουμε το δέντρο σε ένα σημείο όπου οι συνδέσεις μεταξύ ομάδων είναι μεγάλες, ώστε να βρούμε διακριτά clusters. 
+
+
+Δοκιμάζοντας διάφορες τιμές του k, καταλήγουμε στο συμπέρασμα ότι η βέλτιστη τιμή είναι 3, καθώς για k > 3 παρατηρούμε επικαλυπτόμενα clusters, ενώ για k = 2 έχουμε άνιση κατανομή των datapoints.
+
+```{r}
+clusterGroups = cutree(clusterCustomers, k=3)
+plot(clusterCustomers, labels = FALSE, main = "Hierarchical Clustering Cutted Dendrogram")
+rect.hclust(clusterCustomers, k = 3, border = "red")
+```
+
+**Σχόλιο**
+<br>
+Στο κόκκινο πλαίσιο διακρίνεται ο διαχώρισμος των τριών clusters.
+
+Προσθέτουμε τα cluster που δημιουργήσαμε στο αρχικό dataset, σαν κατηγορική μεταβλητή και υπολογίζουμε τον μέσο όρο κάθε μεταβλητής ανά cluster.  
+```{r}
+customers$HC_Cluster <- factor(clusterGroups)
+agg_means <- aggregate(customers_numeric, by = list(Cluster = customers$HC_Cluster), mean)
+```
+
+```{r, echo=FALSE}
+kable(agg_means, 
+      align = rep("c", ncol(agg_means)),
+      col.names = c("Cluster", "Fresh", "Milk", "Grocery", "Frozen", "Detergents_Paper", "Delicassen"),
+      caption = "Μέσος όρος μεταβλητών ανά cluster:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(agg_means), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(agg_means), color = "white") %>%
+  kable_paper(full_width = FALSE, html_font = "inherit")
+
+```
+
+**Σχόλια**
+<br>
+Οι τιμές στα Cluster 1 και 2 είναι παρόμοιες και κινούνται σε χαμηλότερα επίπεδα από αυτές του Cluster 3. Συνεπώς, μπορούμε να υποθέσουμε ότι στα 2 πρώτα Cluster κατηγοριοποιήθηκαν καθημερινοί αγοραστές και μικρομεσαίες επιχειρήσεις. Αντίστοιχα στο τρίτο Cluster, με τις υψηλότερες δαπάνες, εντάσσονται μεγαλύτερες επιχειρήσεις και περισσότερες αγορές.
+<br>
+
+```{r, echo=FALSE}
+pca_res <- prcomp(customers_scaled)
+
+pca_data <- as.data.frame(pca_res$x[, 1:2])
+colnames(pca_data) <- c("PC1", "PC2")
+
+pca_data$Hierarchical <- customers$HC_Cluster
+
+ggplot(pca_data, aes(x = PC1, y = PC2, color = Hierarchical)) +
+  geom_point(size = 2, alpha = 0.7) +
+  labs(title = "Hierarchical Clustering (Ward.D2)",
+       x = "Principal Component 1",
+       y = "Principal Component 2",
+       color = "Cluster") +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set1")
+```
+
+**Σχόλια**
+<br>
+Η μέθοδος της ιεραρχικής συσταδοποίησης παρουσιάζει 2 πολυπληθείς και συμπαγείς ομάδες, οι οποίες ωστόσο σε κάποια σημεία επικαλύπτονται μεταξύ τους. Το cluster 3, που είχε και τις μεγαλύτερες δαπάνες, αποτελεί μία πολύ μικρή ομάδα (πιθανώς outliers), με τα σημεία του να βρίσκονται απομονωμένα.
+
+
+### Συσταδοποίηση K-means
+```{r}
+set.seed(123)
+kmeans_model <- kmeans(customers_scaled, centers = 3, nstart = 25)
+```
+
+**Σχόλια**
+<br>
+Η μέθοδος k-means τοποθετεί τυχαία 3 αρχικά κέντρα και επαναλαμβάνει μετακινήσεις σημείων μεταξύ clusters μέχρι να ελαχιστοποιηθεί η ενδοομαδική διακύμανση. Με το nstart = 25 εκτελούμε την αλγοριθμική διαδικασία από 25 διαφορετικά σημεία εκκίνησης ώστε να βρούμε το βέλτιστο αποτέλεσμα.
+
+
+Προσθέτουμε τα cluster που δημιουργήσαμε στο αρχικό dataset, σαν κατηγορική μεταβλητή και υπολογίζουμε τον μέσο όρο κάθε μεταβλητής ανά cluster. 
+```{r}
+customers$KM_Cluster <- factor(kmeans_model$cluster)
+agg_means_km <- aggregate(customers_numeric, by = list(Cluster = customers$KM_Cluster), mean)
+
+```
+
+```{r, echo=FALSE}
+kable(agg_means_km, 
+      align = rep("c", ncol(agg_means_km)),
+      col.names = c("Cluster", "Fresh", "Milk", "Grocery", "Frozen", "Detergents_Paper", "Delicassen"),
+      caption = "Μέσος όρος μεταβλητών ανά cluster:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(agg_means_km), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(agg_means_km), color = "white") %>%
+  kable_paper(full_width = FALSE, html_font = "inherit")
+
+```
+
+**Σχόλια**
+<br>
+Οι τιμές στα Cluster 1 και 3 είναι παρόμοιες και κινούνται σε χαμηλότερα επίπεδα από αυτές του Cluster 2. Συνεπώς, μπορούμε να υποθέσουμε ότι σε αυτά τα Cluster κατηγοριοποιήθηκαν καθημερινοί αγοραστές και μικρομεσαίες επιχειρήσεις. Αντίστοιχα στο δεύτερο Cluster, με τις υψηλότερες δαπάνες, εντάσσονται μεγαλύτερες επιχειρήσεις και περισσότερες αγορές.
+<br>
+
+```{r, echo=FALSE}
+pca_data$KMeans <- customers$KM_Cluster
+
+ggplot(pca_data, aes(x = PC1, y = PC2, color = KMeans)) +
+  geom_point(size = 2, alpha = 0.7) +
+  labs(title = "K-means Clustering",
+       x = "Principal Component 1",
+       y = "Principal Component 2",
+       color = "Cluster") +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set1")
+
+```
+
+**Σχόλια**
+<br>
+Η μέθοδος K-means παρουσιάζει 3 διαφορετικές ομάδες στον διαχωρισμό των datapoints. Η πρώτη ομάδα έχει αρκετά σημεία διάσπαρτα στον χώρο, κάτι που συμβαίνει και στην δεύτερη ομάδα, η οποία ωστόσο είναι πολύ μικρή και πιθανό να αντιπροσωπεύει outliers. Το τρίτο cluster αποτελεί την μεγαλύτερη και πιο συμπαγής ομάδα και βρίσκεται κυρίως στο πάνω δεξιά τεταρτημόριο. 
+
+
+### Σύγκριση Μοντέλων
+
+- Και τα δύο μοντέλα κατηγοριοποιούν τα Cluster τους με παρόμοιο τρόπο, δηλαδή τοποθετούν τις μικρομεσαίες επιχειρήσεις και τους καθημερινούς αγοραστές, με μικρότερο μέσο όρο δαπανών, σε 2 clusters. Επιπλέον, ταξινομούν τις μεγαλύτερες επιχειρήσεις, με μεγαλύτερο μέσο όρο αγορών, σε ξεχωριστό cluster.
+
+- Η μέθοδος της ιεραρχικής συσταδοποίησης εντόπισε καλά διαχωρισμένα clusters με λογική ερμηνεία, ωστόσο επειδή είναι ευαίσθητη σε outliers, παρατηρείται επικάλυψη των clusters σε κάποια datapoints. Αντίθετα η μέδοθος K-means διαχωρίζει πιο ξεκάθαρα τις ακραίες τιμές σε ξεχωριστό cluster και αποφεύγει τις επικαλύψεις των datapoints μεταξύ των clusters, παράγοντας πιο συμπαγής ομάδες με καθαρά centroids. 
+
+- Γενικότερα, η μέθοδος της ιεραρχικής συσταδοποίησης είναι χρήσιμη για την αρχική διερεύνηση ενός dataset, καθώς με το δενδρόγραμμα παρουσίαζει την φυσική δομή και τον διαχωρισμό των datapoints. Αντιθέτως, η μέθοδος K-means συνήθως προτιμάται στην ομαδοποίηση μεγάλου όγκου δεδομένων και στην λήψη πολύπλοκων επιχειρηματικών αποφάσεων, λόγω της ευκολίας χρήσης και της επαναληψιμότητας που προσφέρει. 
+
+- Συνολικά, ο συνδυασμός των δύο τεχνικών θεωρείται καλή πρακτική, δηλαδή πρώτα συστήνεται η ιεραρχική ανάλυση για την κατανόηση του dataset και την εκτίμηση του κατάλληλου k και στη συνέχεια η εφαρμογή του K-means για πιο σταθερή και παραγωγική ομαδοποίηση.
