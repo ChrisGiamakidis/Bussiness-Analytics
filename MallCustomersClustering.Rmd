@@ -1,0 +1,434 @@
+---
+title: "Mall Customers Clustering"
+author: "Χρήστος Γιαμακίδης Κιοσσές"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: darkly
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Εισαγωγή
+
+### Περιγραφή του Dataset
+
+Το [**Mall Customers Segmentation**](https://www.kaggle.com/datasets/abdallahwagih/mall-customers-segmentation?resource=download) κοινοποιήθηκε στο *Kaggle*, ένα αποθετήριο βάσεων, συνόλων δεδομένων και θεωριών πεδίων. Εντάσσεται στον χώρο της μηχανικής μάθησης και χρησιμοποιείται για σκοπούς ταξινόμησης και επίδειξης αλγορίθμων συσταδοποίησης. Παρέχει δεδομένα για 200 άτομα που επισκέπτονται ένα εμπορικό κέντρο και πιο συγκεκριμένα δημογραφικές τους πληροφορίες, ετήσιο εισόδημα και καταναλωτικές τους συνήθειες.
+
+### Επιχειρηματική Αναλυτική
+
+Η ανάλυση των δεδομένων του dataset επιτρέπει στη διοίκηση του εμπορικού κέντρου και των εσωτερικών του καταστημάτων, να κατανοήσει καλύτερα το προφίλ των πελατών τους και να πάρει στοχευμένες αποφάσεις. Μέσω της συσταδοποίησης, μπορούμε να εντοπίσουμε ομάδες πελατών με παρόμοια συμπεριφορά, γεγονός που συμβάλλει στη **στοχευμένη εμπορική στρατηγική**, τη **βελτιστοποίηση αποθεμάτων**, τη **διαμόρφωση προγραμμάτων** εκπτώσεων και την **ενίσχυση** της σχέσης με τους πιο κερδοφόρους πελάτες.
+
+## Πιθανά Επιχειρηματικά Ερωτήματα
+
+- Υπάρχουν σαφή clusters πελατών;
+
+- Ποιες δημογραφικές ομάδες έχουν υψηλότερο spending score;
+
+- Υπάρχει σχέση μεταξύ εισοδήματος και δαπάνης;
+
+- Ποιες στρατηγικές μπορούν να αυξήσουν τις δαπάνες κάποιων ομάδων;
+
+## Περιγραφή των Μεταβλητών
+
+Το dataset αποτελείται από 200 εγγραφές και 5 μεταβλητές.
+
+```{r, include=FALSE}
+library(readr)
+library(knitr)
+library(lubridate)
+library(kableExtra)
+
+customers <- read_csv("Mall_Customers.csv")
+customers$CustomerID <- as.integer(customers$CustomerID)
+customers$Genre <- factor(customers$Genre, labels = c("Male", "Female"))
+
+names(customers)[names(customers) == "Annual Income (k$)"] <- "AnnualIncome"
+names(customers)[names(customers) == "Spending Score (1-100)"] <- "SpendingScore"
+
+stats <- data.frame(
+  Variable = c("CustomerID", "Genre", "Age", "Annual Income", "Spending Score"),
+  Description = c(
+    "Μοναδικό αναγνωριστικό πελάτη", "Φύλο", "Ηλικία", "Ετήσια εισόδημα", "Ατομική βαθμολογία που αποδίδεται από το εμπορικό κέντρο, με βάση την καταναλωτική συμπεριφορά και τις δαπάνες"),
+  Type = c("Αριθμητική", "Κατηγορική", "Αριθμητική", "Αριθμητική", "Αριθμητική"),
+  Range = c(
+    paste(range(customers$CustomerID), collapse = " - "),
+    paste(unique(customers$Genre), collapse = ", "),
+    paste(range(customers$Age), collapse = " - "),
+    paste(range(customers$AnnualIncome), collapse = " - "),
+    paste(range(customers$SpendingScore), collapse = " - ")
+  ),
+  Measurement_Unit = c("-", "-", "-", "Χιλιάδες Δολλάρια ($)", "-")
+)
+```
+
+```{r, echo=FALSE}
+
+kable(stats, 
+      align = rep("c", ncol(stats)),
+      col.names = c("Μεταβλητή", "Περιγραφή", "Τύπος", "Εύρος", "Μονάδα Μέτρησης"),
+      caption = "Αναλυτικός πίνακας με τα χαρακτηριστικά των πελατών:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(stats), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(stats), color = "white") %>%
+  kable_paper(full_width = FALSE, html_font = "inherit")
+
+```
+
+## Έλεγχος εγκυρότητας του dataset
+
+Παρατηρούμε πως το dataset δεν έχει **missing values**, αλλά ούτε και **διπλότυπες εγγραφές**.
+
+**Ελλιπείς Τιμές**
+```{r}
+cat(sum(is.na(customers)))
+```
+
+**Διπλότυπες Εγγραφές**
+```{r}
+cat(sum(duplicated(customers)))
+```
+
+## Περιγραφικά Στατιστικά
+
+### Μέτρα Κεντρικής Τάσης
+
+Αφαιρούμε την κατηγορική μεταβλητή *Genre* και το μοναδικό αναγνωριστικό του κάθε πελάτη *CustomerID*.
+
+```{r}
+customers_numeric <- subset(customers, select = -c(CustomerID, Genre))
+```
+
+```{r, include=FALSE}
+summary_stats <- data.frame(
+  Metrics = c("1st Qu.", "Median", "Mean", "3rd Qu."),
+  Age = c(
+    quantile(customers_numeric$Age, 0.25),
+    median(customers_numeric$Age),
+    mean(customers_numeric$Age),
+    quantile(customers_numeric$Age, 0.75)
+  ),
+  AnnualIncome = c(
+    quantile(customers_numeric$AnnualIncome, 0.25),
+    median(customers_numeric$AnnualIncome),
+    mean(customers_numeric$AnnualIncome),
+    quantile(customers_numeric$AnnualIncome, 0.75)
+  ),
+  SpendingScore = c(
+    quantile(customers_numeric$SpendingScore, 0.25),
+    median(customers_numeric$SpendingScore),
+    mean(customers_numeric$SpendingScore),
+    quantile(customers_numeric$SpendingScore, 0.75)
+  )
+)
+```
+
+```{r, echo=FALSE}
+
+kable(summary_stats, 
+      align = rep("c", ncol(summary_stats)),
+      col.names = c("Metrics", "Age", "Annual Income", "Spending Score"),
+      caption = "Συνοπτικά στατιστικά για τις αριθμητικές μεταβλητές:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(summary_stats), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(summary_stats), color = "white") %>%
+  kable_paper(full_width = FALSE, html_font = "inherit")
+
+```
+
+### Μέτρα Διασποράς
+
+```{r, include=FALSE}
+distribution_stats <- data.frame(
+  Metrics = c("Standard Deviation", "Sample Variance"),
+  Age = c(
+    sd(customers_numeric$Age),
+    var(customers_numeric$Age)
+  ),
+  AnnualIncome = c(
+    sd(customers_numeric$AnnualIncome),
+    var(customers_numeric$AnnualIncome)
+  ),
+  SpendingScore = c(
+    sd(customers_numeric$SpendingScore),
+    var(customers_numeric$SpendingScore)
+  )
+)
+```
+
+```{r, echo=FALSE}
+
+kable(distribution_stats, 
+      align = rep("c", ncol(distribution_stats)),
+      col.names = c("Metrics", "Age", "Annual Income", "Spending Score"),
+      caption = "Συνοπτικά στατιστικά για τις αριθμητικές μεταβλητές:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(distribution_stats), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(summary_stats), color = "white") %>%
+  kable_paper(full_width = FALSE, html_font = "inherit")
+
+```
+
+## Διαγράμματα Συσχετίσεων
+
+```{r, include=FALSE}
+library(ggplot2)
+```
+
+### *Γράφημα 1:* **Ιστόγραμμα Κατανομής Ηλικίας Πελατών**
+
+```{r}
+ggplot(customers, aes(Age)) +
+  geom_histogram(binwidth = 5, fill = "skyblue", color = "black") +
+  labs(title = "Κατανομή Ηλικίας Πελατών",
+       x = "Ηλικία",
+       y = "Αριθμός Πελατών")
+
+```
+
+**Σχόλιο**
+<br>
+Το παραπάνω διάγραμμα δείχνει πώς κατανέμονται οι ηλικίες των πελατών στο dataset. Παρατηρούμε πως τα περισσότερα datapoints βρίσκονται ηλικιακά μεταξύ των 20 και 40 ετών. Η πληροφορία αυτή είναι χρήσιμη για την αναγνώριση του βασικού ηλικιακού target group.
+
+### *Γράφημα 2:* **Boxplot Ετήσιου εισοδήματος ανά φύλο**
+
+```{r}
+ggplot(customers, aes(x = Genre, y = AnnualIncome, fill = Genre)) +
+  geom_boxplot() +
+  labs(title = "Ετήσιο Εισόδημα ανά Φύλο",
+       x = "Φύλο",
+       y = "Ετήσιο Εισόδημα (k$)") +
+  theme(legend.position = "none")
+
+```
+
+**Σχόλιο**
+<br>
+Παρατηρούμε πως οι γυναίκες του dataset έχουν ελαφρώς μεγαλύτερο μέσο ετήσιο εισόδημα από τους άνδρες, κάτι που ωστόσο μπορεί να επηρεάζεται από την ύπαρξη outlier (μαύρη κουκίδα πάνω από το box). Αυτή η πληροφορία είναι χρήσιμη για την στοχευμένη δημιουργία προσφορών προσφορών.
+
+### *Γράφημα 3:* **Scatter Plot Ετήσιου Εισοδήματος vs Spending Score**
+
+```{r}
+ggplot(customers, aes(x = AnnualIncome, y = SpendingScore, color = Genre)) +
+  geom_point(size = 3, alpha = 0.7) +
+  labs(title = "Ετήσιο Εισόδημα vs Spending Score",
+       x = "Ετήσιο Εισόδημα (k$)",
+       y = "Spending Score") +
+  theme_minimal()
+
+```
+
+**Σχόλιο**
+<br>
+Το παραπάνω διάγραμμα δείχνει πώς κατανέμονται οι πελάτες με βάση το ετήσιο εισόδημα και το spending score τους, διαχωρίζοντας τα φύλα. Παρατηρείται ότι δεν υπάρχει ξεκάθαρη γραμμική συσχέτιση, αλλά διακρίνονται ομάδες πελατών με χαμηλό ή υψηλό spending score ανεξάρτητα από το εισόδημα.
+
+## Συσταδοποίηση
+
+### Προετοιμασία των δεδομένων
+
+Προκειμένου να εφαρμόσουμε clustering στο dataset μας, πρέπει να **κανονικοποιήσουμε** τα δεδομένα ώστε να έχουν μέσο όρο 0 και τυπική απόκλιση 1. Με τον τρόπο αυτό, και έχοντας αφαιρέσει την κατηγορική μεταβλητή *Genre* και το μοναδικό αναγνωριστικό *CustomerID*, όλες οι αριθμητικές μεταβλητές παίρνουν την ίδια κλίμακα και αυτές με μεγάλο εύρος δεν μπορούν πλέον να επηρεάσουν υπερβολικά τα αποτελέσματα.
+
+```{r}
+customers_scaled <- scale(customers_numeric)
+```
+
+### Ιεραρχική Συσταδοποίηση
+
+```{r}
+distances <- dist(customers_scaled, method = "euclidean")
+clusterCustomers <- hclust(distances, method = "ward.D2")
+```
+
+**Σχόλια**
+<br>
+Υπολογίζουμε τις αποστάσεις μεταξύ όλων των παρατηρήσεων στο dataset, αξιοποιώντας την ευκλείδεια απόσταση. Η μέθοδος ward χρησιμοποιείται για να υπολογίσουμε απόσταση μεταξύ των κέντρων των συστάδων.
+
+```{r}
+plot(clusterCustomers, labels = FALSE, main = "Hierarchical Clustering Dendrogram")
+```
+
+**Σχόλιο**
+<br>
+Το δενδροδιάγραμμα δείχνει τη διαδικασία συγχώνευσης των datapoints σε ομάδες. Κάθε κατακόρυφη γραμμή αντιστοιχεί στην απόσταση συγχώνευσης δύο clusters και όσο μεγαλύτερο είναι το ύψος, τόσο μεγαλύτερη η διαφορά μεταξύ των ομάδων που συγχωνεύονται. Θα πρέπει να κόψουμε το δέντρο σε ένα σημείο όπου οι συνδέσεις μεταξύ ομάδων είναι μεγάλες, ώστε να βρούμε διακριτά clusters. 
+
+
+Δοκιμάζοντας διάφορες τιμές του k, καταλήγουμε στο συμπέρασμα ότι η βέλτιστη τιμή είναι 5, καθώς για k > 5 πιθανόν να έχουμε overclustering, ενώ για k < 5 έχουμε άνιση κατανομή των datapoints.
+
+```{r}
+clusterGroups = cutree(clusterCustomers, k=5)
+plot(clusterCustomers, labels = FALSE, main = "Hierarchical Clustering Cutted Dendrogram")
+rect.hclust(clusterCustomers, k = 5, border = "red")
+```
+
+**Σχόλιο**
+<br>
+Στο κόκκινο πλαίσιο διακρίνεται ο διαχώρισμος των 5 clusters.
+
+Προσθέτουμε τα cluster που δημιουργήσαμε στο αρχικό dataset, σαν κατηγορική μεταβλητή και υπολογίζουμε τον μέσο όρο κάθε μεταβλητής ανά cluster.  
+```{r}
+customers$HC_Cluster <- factor(clusterGroups)
+agg_means <- aggregate(customers_numeric, by = list(Cluster = customers$HC_Cluster), mean)
+```
+
+```{r, echo=FALSE}
+kable(agg_means, 
+      align = rep("c", ncol(agg_means)),
+      col.names = c("Cluster", "Age", "Annual Income", "Spending Score"),
+      caption = "Μέσος όρος μεταβλητών ανά cluster:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(agg_means), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(agg_means), color = "white") %>%
+  kable_paper(full_width = FALSE, html_font = "inherit")
+
+```
+
+**Σχόλια**
+<br>
+
+- **Cluster 1:** Οι πελάτες είναι σχετικά μεγαλύτερης ηλικίας (~44 ετών), με χαμηλό ετήσιο εισόδημα (~25) και χαμηλό spending score (~20). *Πιθανό προφίλ*: συντηρητικοί καταναλωτές με περιορισμένη αγοραστική δύναμη.
+
+- **Cluster 2:** Νεότεροι πελάτες (~27 ετών) με μέτριο εισόδημα (~47) και μέτριο προς υψηλό spending score (~57). Ίσως πρόκειται για νεαρούς ενήλικες που ξοδεύουν περισσότερο σε σχέση με το εισόδημά τους.
+
+- **Cluster 3:** Ηλικιωμένοι πελάτες (~56 ετών) με σχετικά καλό εισόδημα (~55) και μέτριο spending score (~48). *Πιθανό προφίλ*: οικονομικά άνετοι αλλά συγκρατημένοι στις δαπάνες.
+
+- **Cluster 4:** Νεότεροι πελάτες (~33 ετών) με υψηλό εισόδημα (~87) και πολύ υψηλό spending score (~82). Πρόκειται πιθανότατα για πελάτες-στόχους με υψηλή αγοραστική διάθεση.
+
+- **Cluster 5:** Πελάτες μέσης ηλικίας (~44 ετών) με υψηλό εισόδημα (~91) αλλά πολύ χαμηλό spending score (~17). *Πιθανό προφίλ*: άτομα με μεγάλη αγοραστική δύναμη που όμως ξοδεύουν πολύ συγκρατημένα.
+<br>
+
+### Διαγραμματική Απεικόνιση Clusters
+
+```{r, echo=FALSE}
+pca_res <- prcomp(customers_scaled)
+
+pca_data <- as.data.frame(pca_res$x[, 1:2])
+colnames(pca_data) <- c("PC1", "PC2")
+
+pca_data$Hierarchical <- customers$HC_Cluster
+
+ggplot(pca_data, aes(x = PC1, y = PC2, color = Hierarchical)) +
+  geom_point(size = 2, alpha = 0.7) +
+  labs(title = "Hierarchical Clustering (Ward.D2)",
+       x = "Principal Component 1",
+       y = "Principal Component 2",
+       color = "Cluster") +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set1")
+```
+
+**Σχόλια**
+<br>
+Το παραπάνω διάγραμμα μας δίνει την κατανομή των datapoints στα 5 διαφορετικά clusters που δημιουργήθηκαν. Παρατηρούμε πως τα περισσότερα clusters διαχωρίζονται αρκετά καθαρά, ειδικά τα Clusters 1 (κόκκινο) και 4 (μωβ) που εμφανίζουν σαφείς περιοχές συγκέντρωσης. Τα Clusters 2 (μπλε) και 3 (πράσινο) έχουν μια μικρή επικάλυψη, που δείχνει ότι ορισμένα σημεία έχουν παρόμοια χαρακτηριστικά. Το Cluster 5 (πορτοκαλί) φαίνεται να καταλαμβάνει ξεχωριστό χώρο, υποδεικνύοντας καλά διακριτό προφίλ πελατών. Η απεικόνιση επιβεβαιώνει ότι η ανάλυση με Ward.D2 παρήγαγε σαφώς διαχωρίσιμες ομάδες, υποστηρίζοντας την ορθότητα της επιλογής k = 5.
+
+### Συσταδοποίηση K-means
+```{r}
+set.seed(123)
+kmeans_model <- kmeans(customers_scaled, centers = 5, nstart = 25)
+```
+
+**Σχόλια**
+<br>
+Η μέθοδος k-means τοποθετεί τυχαία 5 αρχικά κέντρα και επαναλαμβάνει μετακινήσεις σημείων μεταξύ clusters μέχρι να ελαχιστοποιηθεί η ενδοομαδική διακύμανση. Με το nstart = 25 εκτελούμε την αλγοριθμική διαδικασία από 25 διαφορετικά σημεία εκκίνησης ώστε να βρούμε το βέλτιστο αποτέλεσμα.
+
+
+Προσθέτουμε τα cluster που δημιουργήσαμε στο αρχικό dataset, σαν κατηγορική μεταβλητή και υπολογίζουμε τον μέσο όρο κάθε μεταβλητής ανά cluster. 
+```{r}
+customers$KM_Cluster <- factor(kmeans_model$cluster)
+agg_means_km <- aggregate(customers_numeric, by = list(Cluster = customers$KM_Cluster), mean)
+
+```
+
+```{r, echo=FALSE}
+kable(agg_means_km, 
+      align = rep("c", ncol(agg_means_km)),
+      col.names = c("Cluster", "Age", "Annual Income", "Spending Score"),
+      caption = "Μέσος όρος μεταβλητών ανά cluster:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(agg_means_km), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(agg_means_km), color = "white") %>%
+  kable_paper(full_width = FALSE, html_font = "inherit")
+
+```
+
+**Σχόλια**
+<br>
+
+- **Cluster 1:** Νέοι πελάτες (~33 ετών) με υψηλό εισόδημα (~86) και υψηλή καταναλωτική συμπεριφορά (~82). Πρόκειται πιθανότατα για πελάτες-στόχους με υψηλή αγοραστική διάθεση.
+
+- **Cluster 2:** Έφηβοι πελάτες (~25 ετών), με μέτριο εισόδημα (~41) και σχετικά υψηλό spending score (~62). Φαίνεται να έχουν μία τάση για κατανάλωση.
+
+- **Cluster 3:** Μεσήλικες πελάτες (~40 ετών), με υψηλό εισόδημα (~86), αλλά πολύ χαμηλή καταναλωτική συμπεριφορά (~19). Πρόκειται για πιο συντηρητικούς καταναλωτές.
+
+- **Cluster 4:** Η μεγαλύτερη ηλικιακά ομάδα (~56 ετών), με μέσο εισόδημα (~54) και μέτριο spending score (~49). Θα μπορούσαμε να τους χαρακτηρίσουμε ισορροπημένους καταναλωτές.
+
+- **Cluster 5:** Πελάτες μεσαίας ηλικίας (~46 ετών), με χαμηλό εισόδημα (~27) και χαμηλό spending score (~18). Πρόκειτα για πελάτες χαμηλής αξίας.
+<br>
+
+### Διαγραμματική Απεικόνιση Clusters
+
+```{r, echo=FALSE}
+pca_data$KMeans <- customers$KM_Cluster
+
+ggplot(pca_data, aes(x = PC1, y = PC2, color = KMeans)) +
+  geom_point(size = 2, alpha = 0.7) +
+  labs(title = "K-means Clustering",
+       x = "Principal Component 1",
+       y = "Principal Component 2",
+       color = "Cluster") +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set1")
+
+```
+
+**Σχόλια**
+<br>
+Το παραπάνω διάγραμμα μας δίνει την κατανομή των datapoints στα 5 διαφορετικά clusters που δημιουργήθηκαν. Παρατηρούμε πως τα περισσότερα clusters διαχωρίζονται αρκετά καθαρά, ειδικά τα Clusters 2 (μπλε) και 5 (πορτοκαλί) που εμφανίζουν σαφείς περιοχές συγκέντρωσης. Τα Clusters 3 (πράσινο), 4 (μωβ) και 1(κόκκινο) έχουν μεταξύ μια μικρή επικάλυψη, που δείχνει ότι ορισμένα σημεία έχουν παρόμοια χαρακτηριστικά. Η απεικόνιση μας παρουσιάζει ότι η ανάλυση με kmeans παρήγαγε καλά διαχωρίσιμες ομάδες, υποστηρίζοντας την ορθότητα της επιλογής k = 5.
+
+
+### Σύγκριση Μοντέλων
+
+- Και τα δύο μοντέλα κατηγοριοποιούν τα Clusters τους με παρόμοιο τρόπο και αυτό φαίνεται από την διάταξη των datapoints στο χώρο. Αναλυτικότερα κάθε cluster αποτελεί μια ομάδα πελατών με βάση την ηλικία τους, το ετήσιο εισόδημα τους και το spending score. Για το συγκεκριμένο dataset φαίνεται πως η μέθοδος kmeans έχει περισσότερες επικαλύψεις στα datapoints, από την ιεραρχική συσταδοποίηση.
+
+- Γενικότερα, η μέθοδος της ιεραρχικής συσταδοποίησης είναι χρήσιμη για την αρχική διερεύνηση ενός dataset, καθώς με το δενδρόγραμμα παρουσίαζει την φυσική δομή και τον διαχωρισμό των datapoints. Αντιθέτως, η μέθοδος K-means συνήθως προτιμάται στην ομαδοποίηση μεγάλου όγκου δεδομένων και στην λήψη πολύπλοκων επιχειρηματικών αποφάσεων, λόγω της ευκολίας χρήσης και της επαναληψιμότητας που προσφέρει. 
+
+- Συνολικά, ο συνδυασμός των δύο τεχνικών θεωρείται καλή πρακτική, δηλαδή πρώτα συστήνεται η ιεραρχική ανάλυση για την κατανόηση του dataset και την εκτίμηση του κατάλληλου k και στη συνέχεια η εφαρμογή του K-means για πιο σταθερή και παραγωγική ομαδοποίηση.
+
