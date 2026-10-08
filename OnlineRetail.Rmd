@@ -37,7 +37,7 @@ To [**Online Retail Dataset**](https://archive.ics.uci.edu/dataset/352/online+re
 library(readr)
 library(knitr)
 
-onlineRetail <- read.csv("C:/Users/giama/Desktop/Chris/BussinessAnalytics/Lab2/OnlineRetail.csv")
+onlineRetail <- read.csv("OnlineRetail.csv")
 
 onlineRetail$InvoiceDate <- as.Date(onlineRetail$InvoiceDate)
 
