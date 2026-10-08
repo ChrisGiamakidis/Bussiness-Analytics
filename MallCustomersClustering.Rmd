@@ -43,7 +43,7 @@ library(knitr)
 library(lubridate)
 library(kableExtra)
 
-customers <- read_csv("Mall_customers.csv")
+customers <- read_csv("Mall_Customers.csv")
 customers$CustomerID <- as.integer(customers$CustomerID)
 customers$Genre <- factor(customers$Genre, labels = c("Male", "Female"))
 
