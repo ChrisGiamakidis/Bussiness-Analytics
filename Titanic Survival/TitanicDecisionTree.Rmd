@@ -1,0 +1,405 @@
+---
+title: "CART & Logistic Regression on Titanic Dataset"
+author: "Χρήστος Γιαμακίδης Κιοσσές (ics21018)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: darkly
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Εισαγωγή
+
+### Περιγραφή του Dataset
+
+Το [**Titanic - Machine Learning from Disaster**](https://www.kaggle.com/c/titanic/overview) κοινοποιήθηκε το 2012 στο *Kaggle*, ένα αποθετήριο βάσεων, συνόλων δεδομένων και θεωριών πεδίων. Εντάσσεται στον χώρο της μηχανικής μάθησης και χρησιμοποιείται ευρέως για σκοπούς εκπαίδευσης και επίδειξης αλγορίθμων ταξινόμησης. Βασίζεται στο ναυάγιο του Τιτανικού, του διάσημου επιβατηγού πλοίου που βυθίστηκε το 1912 και περιέχει πληροφορίες για τους επιβάτες. Στόχος του είναι η πρόβλεψη της επιβίωσης (Survived) κάθε επιβάτη, με βάση τα χαρακτηριστικά του.
+
+### Επιχειρηματική Αναλυτική
+
+Η ανάλυση των δεδομένων του dataset βοηθά την κατανόηση των παραγόντων που επηρέασαν την πιθανότητα επιβίωσης των επιβατών. Αν και πρόκειται για ιστορικά δεδομένα, η πρακτική αξία της ανάλυσης έγκειται στην **εκπαίδευση μοντέλων πρόβλεψης**, την **ανάλυση συμπεριφοράς** και την **ανάπτυξη ικανοτήτων** στην *επεξεργασία* και *ερμηνεία* δεδομένων, που είναι κρίσιμες σε πραγματικά επιχειρησιακά περιβάλλοντα.
+
+
+## Περιγραφή των Μεταβλητών
+
+Το train dataset αποτελείται από 891 εγγραφές και 12 μεταβλητές.
+
+```{r, include=FALSE}
+library(readr)
+library(knitr)
+library(lubridate)
+library(kableExtra)
+library(ROCR)
+
+train <- read.csv("train.csv")
+
+stats <- data.frame(
+  Variable = c("PassengerId", "Survived", "Pclass", "Name", "Sex", "Age", "Sibsp", "Parch", "Ticket", "Fare", "Cabin", "Embarked"),
+  Description = c(
+    "Αναγνωριστικό Επιβάτη", "Κατάφερε να επιβιώσει (ναι/όχι)", "Κατηγορία Εισιτηρίου", "Όνομα", "Φύλλο", "Ηλικία", "Αριθμός αδελφών/συζύγου στο πλοίο", "Αριθμός γονέων/παιδιών στο πλοίο", "Αριθμός εισιτηρίου", "Τιμή εισιτηρίου", "Αριθμός καμπίνας", "Λιμάνι επιβίβασης"),
+  Type = c("Αριθμητική", "Αριθμητική", "Αριθμητική", "Κατηγορική", "Κατηγορική", "Αριθμητική", "Αριθμητική", "Αριθμητική", "Κατηγορική", "Αριθμητική", "Κατηγορική", "Κατηγορική"),
+  Range = c(
+    paste(range(train$PassengerId), collapse = " - "),
+    paste(range(train$Survived), collapse = " - "),
+    paste(range(train$Pclass), collapse = " - "),
+    paste(sample(unique(train$Name), 5), collapse = ", "),
+    paste(levels(factor(train$Sex)), collapse = ", "),
+    paste(range(train$Age), collapse = " - "),
+    paste(range(train$SibSp), collapse = " - "),
+    paste(range(train$Parch), collapse = " - "),
+    paste(sample(unique(train$Ticket), 5), collapse = ", "),
+    paste(range(train$Fare), collapse = " - "),
+    paste(sample(unique(train$Cabin), 5), collapse = ", "),
+    paste(levels(factor(train$Embarked)), collapse = ", ")
+  ),
+  Measurement_Unit = c("-", "-", "-", "-", "-", "Έτη", "-", "-", "-", "Δολλάρια ($)", "-", "-")
+)
+```
+
+```{r, echo=FALSE}
+
+kable(stats, 
+      align = rep("c", ncol(stats)),
+      col.names = c("Μεταβλητή", "Περιγραφή", "Τύπος", "Εύρος", "Μονάδα Μέτρησης"),
+      caption = "Αναλυτικός πίνακας με τα στοιχεία των επιβατών του Τιτανικού:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(stats), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(stats), color = "white") %>%
+  kable_paper(full_width = FALSE, html_font = "inherit")
+
+```
+
+
+## Έλεγχος εγκυρότητας του dataset
+
+Παρατηρούμε πως το dataset έχει κάποια **missing values**, καθώς στο εύρος των τιμών για τις ηλικίες των επιβατών εμφανίζεται NA. Επιπλέον στην μεταβλητή που δείχνει σε ποιο λιμάνι επιβιβάστηκε ο πελάτης φαίνεται να υπάρχει empty string "", πριν τους χαρακτηριστικούς τύπους **C = Cherbourg**, **Q = Queenstown** και **S = Southampton**.
+
+**Ελλιπείς Τιμές**
+```{r}
+cat(sum(is.na(train)))
+```
+
+**Διπλότυπες Εγγραφές**
+```{r}
+cat(sum(duplicated(train)))
+```
+
+Αφαιρούμε από το dataset τις εγρραφές που έχουν missing values.
+```{r}
+train$Embarked[train$Embarked == ""] <- NA
+clean_train <- na.omit(train)
+```
+
+```{r, echo=FALSE}
+stats <- data.frame(
+  Variable = c("Age", "Embarked"),
+  Description = c("Ηλικία Επιβάτη", "Λιμάνι επιβίβασης"),
+  Type = c("Αριθμητική", "Κατηγορική"),
+  Range = c(
+    paste(range(clean_train$Age), collapse = " - "),
+    paste(levels(factor(clean_train$Embarked)), collapse = ", ")
+  ),
+  Measurement_Unit = c("Έτη", "-")
+)
+```
+
+```{r, echo=FALSE}
+
+kable(stats, 
+      align = rep("c", ncol(stats)),
+      col.names = c("Μεταβλητή", "Περιγραφή", "Τύπος", "Εύρος", "Μονάδα Μέτρησης"),
+      caption = "Πινακας με τις εγγραφές που είχαν NA's:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(stats), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(stats), color = "white") %>%
+  kable_paper(full_width = FALSE, html_font = "inherit")
+
+```
+
+```{r, echo=FALSE}
+cat("Συνολικές εγγραφές του dataset μετά την αφαίρεση των ελλειπών τιμών:", nrow(clean_train))
+```
+
+## Λογιστική Παλινδρόμηση
+
+Κατανομή των τιμών της *εξαρτημένης* μεταβλητής Survived του dataset:
+```{r}
+table(clean_train$Survived)
+```
+
+```{r}
+baseaccprop <- (288/712)*100
+cat(round(baseaccprop, digits = 1))
+```
+**Σχόλιο**
+<br>
+Παρατηρείται πως μόνο οι 288 επιβάτες από τους 712 κατάφεραν να επιβιώσουν. Έαν λοιπόν προβλέψουμε ότι όλοι οι επιβάτες του πλοίου σώθηκαν τότε σύμφωνα με την μέθοδο της **απλής βάσης** θα πετύχουμε το αποτέλεσμα με ακρίβεια της τάξης του *40.4%*. Εφαρμόζοντας τη λογιστική παλινδρόμηση στοχεύουμε στην καλύτερη ικανότητα αναγνώρισης των διασωθέντων επιβατών, δηλαδή στην αύξηση του παραπάνω ποσοστού πρόβλεψης.
+
+### Προετοιμασία των δεδομένων
+
+Μετατρέπουμε όλες τις κατηγορικές μεταβλητές σε factors. 
+```{r}
+clean_train$Survived <- as.factor(clean_train$Survived)
+clean_train$Pclass <- as.factor(clean_train$Pclass)
+clean_train$Sex <- as.factor(clean_train$Sex)
+clean_train$Cabin <- as.factor(clean_train$Cabin)
+clean_train$Embarked <- as.factor(clean_train$Embarked)
+```
+
+### Δημιουργία Μοντέλου Λογιστικής Παλινδρόμησης
+
+Αφαιρούμε από το μοντέλο της ανεξάρτητες μεταβλητές *PassengerId*, *Name* και *Ticket*, καθώς αυτές αποτελούν **μοναδικά αναγνωριστικά** για κάθε επιβάτη και άρα δεν έχουν κάποια επίδραση στο αποτέλεσμα της πρόβλεψης.
+
+```{r}
+LRmodel <- glm(Survived ~ Pclass + Cabin + Sex + Age + SibSp + Parch + Fare + Embarked, data = clean_train, family = "binomial")
+summary(LRmodel)
+```
+
+*Ερμηνεία Συσχετίσεων*
+<br>
+Θεωρούμε στατιστικά σημαντικές τις ανεξάρτητες μεταβλητές που στη στήλη `Pr(>|z|)` έχουν τιμές **<0.01**, δηλαδή αυτές που έχουν τουλάχιστον δύο ** από δίπλα τους.
+
+```{r, include=FALSE}
+stats <- data.frame(
+  Variable = c("Pclass3", "Sexmale", "Age", "SibSp"),
+  Estimate = c("-1.868e+00", "-2.655e+00", "-4.868e-02", "-5.037e-01"),
+  Pvalue = c("0.004153", "< 2e-16", "3.43e-06", "0.000835"),
+  Significance = c("Ισχυρή", "Πολύ ισχυρή", "Αρκετά ισχυρή", "Ισχυρή")
+)
+```
+
+```{r, echo=FALSE}
+
+kable(stats, 
+      align = rep("c", ncol(stats)),
+      col.names = c("Μεταβλητή", "Συντελεστής (Estimate)", "P-value", "Επίδραση"),
+      caption = "Στατιστικά σημαντικές μεταβλητές (p < 0.01):") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(stats), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(stats), color = "white") %>%
+  kable_paper(html_font = "inherit")
+
+```
+
+**Παρατηρήσεις:**
+<br>
+
+- Εάν το εισιτήριο του επιβάτη ανήκει στην 2η (ή και 3η όπως θα δούμε παρακάτω) κατηγορία, τότε η πιθανότητα επιβίωσης **μειώνεται**.
+
+- Εάν ο επιβάτης είναι άνδρας, τότε η πιθανότητα επιβίωσης **μειώνεται**.
+
+- Όσο μεγαλύτερος είναι ο επιβάτης ηλικιακά, τόσο **μικρότερη** είναι η πιθανότητα επιβίωσης.
+
+- Η ύπαρξη αδελφών ή και συζύγου στο πλοίο **μειώνει** την πιθανότητα επιβίωσης του επιβάτη.
+
+
+### Διαδικασία αφαίρεσης μεταβλητών
+
+Με βάση τον παραπάνω πίνακα, έχει νοήμα να κρατήσουμε στο τελικό μοντέλο της λογιστικής παλινδρόμησης τις ανεξάρτητες μεταβλητές *Pclass*, *Sex*, *Age* και *SibSp*.
+
+```{r}
+LRmodel2 <- glm(Survived ~ Pclass + Sex + Age + SibSp , data = clean_train, family = "binomial")
+summary(LRmodel2)
+```
+
+**Σχόλιο**
+<br>
+Όπως φαίνεται και από τον δείκτη AIC, το δεύτερο μοντέλο λογιστικής παλινδρόμησης προβλέπει καλύτερα την πιθανότητα της επιβίωσης.
+
+- **LRmodel**: AIC = 776.18
+
+- **LRmodel2**: AIC = 648.04
+
+
+### Εισαγωγή και προετοιμασία του test set
+
+```{r}
+test <- read.csv("test.csv")
+clean_test <- na.omit(test)
+clean_test$Survived <- as.factor(clean_test$Survived)
+clean_test$Pclass <- as.factor(clean_test$Pclass)
+clean_test$Sex <- as.factor(clean_test$Sex)
+```
+
+### Προβλέψεις τιμών στο test set
+
+```{r}
+predictTest <- predict(LRmodel2, newdata = clean_test, type = "response")
+```
+
+### Confusion Matrix
+
+```{r}
+threshold <- 0.5
+pred_class <- ifelse(predictTest >= threshold, "Survived", "Died")
+pred_class <- factor(pred_class, levels = c("Died", "Survived"))
+actual_class <- factor(clean_test$Survived, levels = c(0, 1), labels = c("Died", "Survived"))
+
+conf_mat <- table(Predicted = pred_class, Actual = actual_class)
+print(conf_mat)
+
+cat("Accuracy =", sum(diag(conf_mat)) / sum(conf_mat), "\n", 
+    "Sensitivity =", conf_mat["Survived", "Survived"] / sum(conf_mat[, "Survived"]), "\n",
+    "Specificity =", conf_mat["Died", "Died"] / sum(conf_mat[, "Died"]))
+```
+
+**Σχόλιο**
+<br>
+Σαφώς πιο **βελτιωμένη** η τιμή του Accuracy στο μοντέλο της λογιστικής παλινδρόμησης από την αντίστοιχη του baseline (0.404).
+
+### Καμπύλη ROC και AUC
+```{r}
+ROCRpredLR <- prediction(predictTest, clean_test$Survived)
+ROCperf <- performance(ROCRpredLR, "tpr", "fpr")
+plot(ROCperf, colorize = TRUE, main = "ROC Curve", xlab = "Specificity", ylab = "Sensitivity")
+
+cat("AUC =", as.numeric(performance(ROCRpredLR, "auc")@y.values))
+```
+
+**Σχόλιο**
+<br>
+Η καμπύλη ROC δείχνει ότι το μοντέλο λογιστικής παλινδρόμησης έχει πολύ καλή ικανότητα πρόβλεψης των επιβατών που κατάφεραν να επιβιώσουν. Η τιμή του **AUC = 0.9759148** μας δίνει την απόλυτη τιμή της ποιότητας πρόβλεψης, δηλαδή ότι το μοντέλο προβλέπει με ακρίβεια **97.6%**.
+
+
+## Δέντρο Απόφασης
+
+### Cross Validation
+
+```{r, include=FALSE}
+library(ggplot2)
+library(lattice)
+library(caret)
+library(e1071)
+library(rpart)
+library(rpart.plot)
+```
+
+```{r}
+numFolds <- trainControl(method = "cv", number=7)
+cpGrid <- expand.grid(.cp = seq(0.01,0.47,0.01))
+train(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare + Cabin + Embarked, data=clean_train, method="rpart", trControl=numFolds, tuneGrid=cpGrid)
+```
+
+**Σχόλιο**
+<br>
+Η ιδανική τιμή για το cp που προκύπτει είναι 0.01.
+
+
+### Δημιουργία μοντέλου CART
+
+Κρατάμε τις ίδιες 8 ανεξάρτητες μεταβλητές που δώσαμε και στο μοντέλο της λογιστικής παλινδρόμησης.
+
+```{r}
+SurvivedTree <- rpart(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked, data = clean_train, method="class", cp=0.01)
+prp(SurvivedTree)
+```
+
+**Παρατηρήσεις**
+<br>
+Το δέντρο βασίζεται κυρίως στις μεταβλητές *Sex*, *Age*, *SibSp*, *Pclass*, *Fare* και *Parch* για να καταλήξει σε απόφαση. Αποφεύγει την προσθήκη της μεταβλητής *Cabin*, καθώς σε αρκετές εγγραφές έχει missing values, αλλά και της *Embarked*, η οποία έχει λίγες κατηγορίες (π.χ. S, C, Q) και μικρή επίδραση στο *Survived*. Κάθε διαδρομή από τη ρίζα έως ένα φύλλο (0 ή 1) αποτελεί μια πιθανή διαδρομή απόφασης.
+
+
+### Προβλέψεις τιμών στο test set
+
+```{r}
+predictTestCart <- predict(SurvivedTree, newdata = clean_test, type = "prob")[, 2]
+
+```
+
+### Confusion Matrix
+
+```{r}
+predictTestCart_class <- predict(SurvivedTree, newdata = clean_test, type = "class")
+conf_mat <- table(
+  Predicted = factor(predictTestCart_class, levels = c(0, 1), labels = c("Died", "Survived")),
+  Actual = factor(clean_test$Survived, levels = c(0, 1), labels = c("Died", "Survived"))
+)
+
+print(conf_mat)
+
+cat("Accuracy =", sum(diag(conf_mat)) / sum(conf_mat), "\n", 
+    "Sensitivity =", conf_mat["Survived", "Survived"] / sum(conf_mat[, "Survived"]), "\n",
+    "Specificity =", conf_mat["Died", "Died"] / sum(conf_mat[, "Died"]))
+```
+
+**Σχόλιο**
+<br>
+Η τιμή του Accuracy στο μοντέλο Cart είναι ίδια με την αντίστοιχη της λογιστικής παλινδρόμησης (0.9214502). Ωστόσο το μοντέλο Cart προβλέπει 10 παραπάνω **True Negatives** και 10 λιγότερα **True Positives**, από το μοντέλο της λογιστικής παλινδρόμησης.
+
+### Καμπύλη ROC και AUC
+```{r}
+ROCRpredCart <- prediction(predictTestCart, clean_test$Survived)
+ROCperfCart <- performance(ROCRpredCart, "tpr", "fpr")
+plot(ROCperfCart, colorize = TRUE, main = "ROC Curve", xlab = "Specificity", ylab = "Sensitivity")
+
+cat("AUC =", as.numeric(performance(ROCRpredCart, "auc")@y.values))
+```
+
+**Σχόλια**
+<br>
+Η καμπύλη ROC δείχνει ότι το μοντέλο Cart έχει αρκετά καλή ικανότητα πρόβλεψης των επιβατών που κατάφεραν να επιβιώσουν. Η τιμή του **AUC = 0.9025012** μας δίνει την απόλυτη τιμή της ποιότητας πρόβλεψης, δηλαδή ότι το μοντέλο προβλέπει με ακρίβεια **90.2%**.
+
+## Συμπεράσματα
+
+```{r, include=FALSE}
+stats <- data.frame(
+  Metrics = c("Accuracy", "AUC (ROC)", "Sensitivity", "Specificity", "Confusion Matrix"),
+  LR = c("0.9214502", "0.9759148", "0.9212598", "0.9215686", "Απόλυτα συμμετρικός"),
+  Cart = c("0.9214502", "0.9025012", "0.8425197", "0.9705882", "Σχετικά συμμετρικός")
+)
+```
+
+```{r, echo=FALSE}
+
+kable(stats, 
+      align = rep("c", ncol(stats)),
+      col.names = c("Μετρική", "Logistic Regression", "CART"),
+      caption = "Αναλυτικός πίνακας μετρικών:") %>%
+  kable_styling(
+    bootstrap_options = c("hover"),
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, align = "c", 
+           extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%  
+  row_spec(1:nrow(stats), 
+           extra_css = "vertical-align: middle; color: white;") %>%
+  column_spec(1:ncol(stats), color = "white") %>%
+  kable_paper(html_font = "inherit")
+
+```
+
+**Σχολιασμός Αποτελεσμάτων**
+<br>
+
+- Και τα δύο μοντέλα έχουν την ίδια ακρίβεια στις προβλέψεις του test set (ίδιο Accuracy / 0.921), γεγονός που δείχνει ότι είναι εξίσου ικανά στο να προβλέπουν σωστά την πιθανότητα επιβίωσης. Ωστόσο, η τιμή αυτή από μόνη της δεν επαρκεί για την πλήρη αξιολόγηση της απόδοσης, ειδικά σε περιπτώσεις ανισορροπίας μεταξύ των κλάσεων.
+
+- Το μοντέλο της λογιστικής παλινδρόμησης παρουσιάζει υψηλότερη τιμή AUC, κάτι που δείχνει ότι είναι πιο ικανό να διαχωρίζει τις δύο κλάσεις με βάση τις προβλεπόμενες πιθανότητες. Το μοντέλο Cart από την άλλη, λόγω του διακριτού χαρακτήρα των προβλέψεών του, έχει χαμηλότερη ευελιξία στο διαχωρισμό, με συνέπεια χαμηλότερη AUC.
+
+- Το μοντέλο της λογιστικής παλινδρόμησης έχει πιο ισορροπημένες τιμές: Sensitivity = 0.921 και Specificity = 0.922, σε αντίθεση με το μοντέλο CART που παρουσιάζει ελαφρώς πιο συντηρητική συμπεριφορά: Specificity = 0.971 και Sensitivity = 0.843. Αυτό σημαίνει πως το μοντέλο CART είναι πιο αυστηρό στο να προβλέπει την πιθανότητα επιβίωσης, με αποτέλεσμα να μειώνει τα False Positives, αλλά και να αυξάνει τα False Negatives.
+
+Γενικότερα όταν ο στόχος της μελέτης είναι η **βέλτιστη διαχωριστική ικανότητα** μεταξύ των πιθανών αποτελεσμάτων, τότε το μοντέλο της λογιστικής παλινδρόμησης είναι καλύτερη επιλογή. Από την άλλη αν η **ερμηνευσιμότητα** είναι πιο σημαντική, τότε το μοντέλο CART προσφέρει απλούστερους και κατανοητούς κανόνες.
+
