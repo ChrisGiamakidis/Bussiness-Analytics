@@ -1,0 +1,126 @@
+NBA_train <- read.csv("NBA_train.csv")
+NBA_train$PTSdiff <- NBA_train$PTS - NBA_train$oppPTS
+plot(NBA_train$W, NBA_train$PTSdiff)
+plot(NBA_train$PTSdiff, NBA_train$W)
+cor(NBA_train$PTSdiff, NBA_train$W)
+WinsReg <- lm(W~PTSdiff, data=NBA_train)
+summary(WinsReg)
+coef(NBA_train$PTSdiff)
+coef(NBA_train)
+coef(WinsReg)
+PointsReg <- lm(PTS ~ `2PA`+ `3PA` + FTA + AST + ORB + DRB + TOV + STL + BLK,
+data=NBA_train)
+PointsReg <- lm(PTS ~ X2PA+ X3PA + FTA + AST + ORB + DRB + TOV + STL + BLK,
+data=NBA_train)
+View(PointsReg)
+PointsReg <- lm(PTS ~ `2PA`+ `3PA` + FTA + AST + ORB + DRB + TOV + STL + BLK,
+data=NBA_train)
+PointsReg <- lm(PTS ~ X2PA + X3PA + FTA + AST + ORB + DRB + TOV + STL + BLK, data=NBA_train)
+summary(PointsReg)
+SSE <- sum(PointsReg$residuals^2)
+RMSE <- sqrt(SSE/nrow(NBA_train))
+SSE
+RMSE
+mean(NBA_train$PTS)
+PointsReg2 <- lm(PTS ~ X2PA + X3PA + FTA + AST + ORB + DRB + STL + BLK,
+data=NBA_train)
+summary(PointsReg2)
+SSE_4
+SSE_4 <- sum(PointsReg4$residuals^2)
+SSE_4
+SSE_4 <- sum(PointsReg4$residuals^2)
+SSE2 <- sum(PointsReg2$residuals^2)
+SSE2
+RMSE2 <- sqrt(SSE2/nrow(NBA_train))
+RMSE2
+read.csv("NBA_test.csv")
+NBA_train <- read.csv("NBA_test.csv")
+NBA_test <- read.csv("NBA_test.csv")
+PointsPredictions <- predict(PointsReg2, newdata=NBA_test)
+NBA_train <- read.csv("NBA_train.csv")
+NBA_train$PTSdiff <- NBA_train$PTS - NBA_train$oppPTS
+plot(NBA_train$PTSdiff, NBA_train$W)
+cor(NBA_train$PTSdiff, NBA_train$W)
+WinsReg <- lm(W~PTSdiff, data=NBA_train)
+summary(WinsReg)
+coef(WinsReg)
+PointsReg <- lm(PTS ~ X2PA + X3PA + FTA + AST + ORB + DRB + TOV + STL + BLK,
+data=NBA_train)
+summary(PointsReg)
+SSE <- sum(PointsReg$residuals^2)
+SSE
+RMSE <- sqrt(SSE/nrow(NBA_train))
+RMSE
+mean(NBA_train$PTS)
+PointsReg2 <- lm(PTS ~ X2PA + X3PA + FTA + AST + ORB + DRB + STL + BLK,
+data=NBA_train)
+summary(PointsReg2)
+SSE2 <- sum(PointsReg2$residuals^2)
+SSE2
+RMSE2 <- sqrt(SSE2/nrow(NBA_train))
+RMSE2
+NBA_test <- read.csv("NBA_test.csv")
+PointsPredictions <- predict(PointsReg2, newdata=NBA_test)
+SSE <- sum((PointsPredictions - NBA_test$PTS)^2)
+SST <- sum((mean(NBA_train$PTS) - NBA_test$PTS)^2)
+R2 <- 1 - SSE/SST
+SSE
+SST
+R2
+RMSE <- sqrt(SSE/nrow(NBA_test))
+RMSE
+framingham <- read.csv("framingham.csv")
+framingham <- read.csv("framingham.csv")
+View(framingham)
+View(framingham)
+library(caTools)
+set.seed(18)
+split <- sample.split(framingham$TenYearCHD, SplitRatio=0.65)
+train = subset(framingham,split==TRUE)
+test = subset(framingham,split==FALSE)
+nrow(train)
+nrow(train)
+nrow(test)
+framinghamLog <- glm(TenYearCHD ~ ., data = train, family=binomial)
+summary(framinghamLog)
+predictTest <- predict(framinghamLog, type="response", newdata=test)
+summary(predictTest)
+table(test$TenYearCHD, predictTest > 0.5)
+table(test$TenYearCHD, predictTest > 0.6)
+table(test$TenYearCHD, predictTest > 0.3)
+table(test$TenYearCHD, predictTest > 0.5)
+table(test$TenYearCHD, predictTest > 0.5)
+library(ROCR)
+ROCRpred <- prediction(predictTest, test$TenYearCHD)
+train2 = na.omit(train)
+test2 = na.omit(test)
+framinghamLog2 = glm(TenYearCHD ~ ., data = train2, family = binomial)
+predictTest2 = predict(framinghamLog2, type = "response", newdata = test2)
+ROCRpred2 <- prediction(predictTest2, test2$TenYearCHD)
+ROCRperf2 <- performance(ROCRpred2, `tpr`, `fpr`)
+ROCRperf2 <- performance(ROCRpred2, 'tpr', 'fpr')
+plot(ROCRperf2) #απλή μορφή
+plot(ROCRperf2,colorize = TRUE) # color coding.
+#για να δίνει η καμπύλη και τις τιμές κατωφλιού ανα 0.1.
+plot(ROCRperf2,colorize = TRUE, print.cutoffs.at=seq(0,1,0.1),text.adj=c(-0.2,1.7))
+as.numeric(performance(ROCRpred2, "auc")@y.values)
+knitr::opts_chunk$set(echo = TRUE)
+kable(metrics_df,
+row.names = FALSE,
+align = rep("l", ncol(metrics_df)),
+col.names = c("Μετρική", "Τύπος", "Τιμή"),
+caption = "Αναλυτικός πίνακας μετρικών απόδοσης:") %>%
+kable_styling(
+bootstrap_options = c("hover"),
+position = "center"
+) %>%
+row_spec(0, bold = TRUE, align = "l",
+extra_css = "vertical-align: middle; color: white; background-color: #2C3E50;") %>%
+row_spec(1:nrow(metrics_df),
+extra_css = "vertical-align: middle; color: white;") %>%
+column_spec(1:ncol(metrics_df), color = "white") %>%
+kable_paper(html_font = "inherit")
+```
+library(rsconnect)
+showLogs()
+install.packages(c("rsconnect", "rmarkdown", "knitr"))
